@@ -39,7 +39,7 @@ class Packet:
 
     @property
     def length(self) -> int:
-        if is_user_interface_req(self.start):
+        if is_user_interface_req(self.start, self.command):
             return len(self.data)
         else:
             return int(len(self.data) / 2)
@@ -55,7 +55,7 @@ class Packet:
         data += "{:02x}".format(self.start)
 
         if self.address is not None:
-            if is_user_interface_req(self.start):
+            if is_user_interface_req(self.start, self.command):
                 data += "{:01x}".format(self.address)
             else:
                 data += "{:02x}".format(self.address)
@@ -111,6 +111,15 @@ class Packet:
         # if not is_data_valid(_data.decode('ascii')):
         #     raise ValueError("Unable to decode: checksum verification failed")
 
+
+        # Decoding of Length requires knowledge of the packet type, which normally is specified by
+        # the start byte and command type. Since the command cannot be decoded until after the length
+        # there is a circular dependency
+        # Instead, identify packet type via the position of the command byte
+        # Input (to Ness) User-Interface Packet always have command 60 at position 5
+        # Output packets always have command 61 at position 4 or 6
+        is_input_ui_req = (_data[5:7] =="60")
+
         data = DataIterator(_data)
         _LOGGER.debug("Decoding bytes: '%s'", _data)
 
@@ -118,13 +127,13 @@ class Packet:
 
         address = None
         if has_address(start, len(_data)):
-            address = data.take_hex(half=is_user_interface_req(start))
+            address = data.take_hex(half=is_input_ui_req)
 
         length = data.take_hex()
         data_length = length & 0x7F
         seq = length >> 7
         command = CommandType(data.take_hex())
-        msg_data = data.take_bytes(data_length, half=is_user_interface_req(start))
+        msg_data = data.take_bytes(data_length, half=is_input_ui_req)
         timestamp = None
         if has_timestamp(start):
             timestamp = decode_timestamp(data.take_bytes(6))
@@ -136,9 +145,7 @@ class Packet:
             raise ValueError("Unable to consume all data")
 
         return Packet(
-            is_user_interface_resp=(
-                is_user_interface_resp(start) and command == CommandType.USER_INTERFACE
-            ),
+            is_user_interface_resp=is_user_interface_resp(start, command),
             address=address,
             seq=seq,
             command=command,
@@ -185,12 +192,12 @@ def has_timestamp(start: int) -> bool:
     return bool(0x04 & start)
 
 
-def is_user_interface_req(start: int) -> bool:
-    return start == 0x83
+def is_user_interface_req(start: int, command: int) -> bool:
+    return start == 0x83 and command == CommandType.USER_INTERFACE
 
 
-def is_user_interface_resp(start: int) -> bool:
-    return start == 0x82
+def is_user_interface_resp(start: int, command: int) -> bool:
+    return start == 0x82 and command == CommandType.USER_INTERFACE
 
 
 def decode_timestamp(data: str) -> datetime.datetime:
