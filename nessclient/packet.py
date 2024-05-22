@@ -144,6 +144,14 @@ class Packet:
         # Input (to Ness) User-Interface Packet always have command 60 at position 5
         # Output packets always have command 61 at position 4 or 6
         is_input_ui_req = _data[5:7] == "60"
+        if is_input_ui_req:
+            # Input (to Ness) User-Interface Packet
+
+            # Input Packets can have a command separator delay marker
+            # Check for, and remove the delay marker
+            if _data[-1:] == "?":
+                _data = _data[:-1]
+
 
         data = DataIterator(_data)
         _LOGGER.debug("Decoding bytes: '%s'", _data)
