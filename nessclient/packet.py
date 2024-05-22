@@ -234,8 +234,10 @@ class Packet:
 
         # Check and remove the finish marker
         if _data[-2:] != "\r\n":
-            raise ValueError(f"Packet data {_data!r} did not "
-                             f"end with CRLF newline - ignoring  {_data[-2:]}")
+            raise ValueError(
+                f"Packet data {_data!r} did not "
+                f"end with CRLF newline - ignoring  {_data[-2:]}"
+            )
         _data = _data[:-2]
 
         # TODO(NW): Figure out checksum validation
