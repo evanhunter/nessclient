@@ -94,7 +94,7 @@ class Packet:
             else:
                 data += checksum_str
 
-        return data
+        return data + "\r\n"
 
     @classmethod
     def decode(cls, _data: str) -> "Packet":
@@ -121,6 +121,16 @@ class Packet:
         message, since the timestamp and data fields are represented using a
         non-hex representation and therefore must be manually decoded.
         """
+
+        # Check minimum data size (Start:2, Length:1, Command:2, Checksum:2, Finish:2)
+        if len(_data) < 9:
+            raise ValueError(f"Packet data too short : {_data!r}")
+
+        # Check and remove the finish marker
+        if _data[-2:] != "\r\n":
+            raise ValueError(f"Packet data {_data!r} did not "
+                             f"end with CRLF newline - ignoring  {_data[-2:]}")
+        _data = _data[:-2]
 
         # TODO(NW): Figure out checksum validation
         # if not is_data_valid(_data.decode('ascii')):

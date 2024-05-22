@@ -112,7 +112,7 @@ class Client:
             timestamp=None,
         )
         await self._connect()
-        payload = packet.encode() + "\r\n"
+        payload = packet.encode()
         _LOGGER.debug("Sending payload: %s", repr(payload))
         return await self._connection.write(payload.encode("ascii"))
 
@@ -128,7 +128,7 @@ class Client:
 
                 self._last_recv = datetime.datetime.now()
                 try:
-                    decoded_data = data.decode("utf-8").strip()
+                    decoded_data = data.decode("ascii")
                 except UnicodeDecodeError:
                     _LOGGER.warning("Failed to decode data", exc_info=True)
                     continue

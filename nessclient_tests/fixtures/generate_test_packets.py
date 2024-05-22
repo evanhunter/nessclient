@@ -1,5 +1,6 @@
 import enum
 from datetime import datetime
+from typing import Iterable
 
 from nessclient.event import (
     ZoneUpdate,
@@ -21,7 +22,7 @@ def Gemerate_Input_To_Ness_User_Interface_Valid_Packets() -> list[tuple[str, str
         for length in range(1, 30 + 1):
             packet = f"83{address:x}{length:02x}60{data[0:length]}"
             checksum = (256 - sum([ord(x) for x in packet])) % 256
-            packet = f"{packet}{checksum:02X}"
+            packet = f"{packet}{checksum:02X}\r\n"
             Input_To_Ness_User_Interface_Valid_Packets.append(
                 (
                     packet,
@@ -278,7 +279,7 @@ def Gemerate_Output_From_Ness_Event_Data_Valid_Packets() -> list[tuple[str, str]
                     for pos in range(0, len(packet), 2):
                         total += int(packet[pos : pos + 2], 16)
                     checksum = (256 - total) % 256
-                    packet = f"{packet}{checksum:02x}"
+                    packet = f"{packet}{checksum:02x}\r\n"
 
                     Output_From_Ness_Event_Data_Valid_Packets.append(
                         (
@@ -530,7 +531,7 @@ def Gemerate_Output_From_Ness_Status_Update_Valid_Packets() -> list[tuple[str, s
             for pos in range(0, len(packet), 2):
                 total += int(packet[pos : pos + 2], 16)
             checksum = (256 - total) % 256
-            packet = f"{packet}{checksum:02x}"
+            packet = f"{packet}{checksum:02x}\r\n"
 
             Output_From_Ness_Status_Update_Valid_Packets.append(
                 (packet, f"{name} for address {address}")

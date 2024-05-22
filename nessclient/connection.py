@@ -66,7 +66,7 @@ class AsyncIoConnection(Connection):
             self._reader = None
             return None
 
-        return data.strip()
+        return data
 
     async def write(self, data: bytes) -> None:
         _LOGGER.debug("Waiting for write_lock to write data: %s", data)
