@@ -16,8 +16,8 @@ def fixture_path(fixture_name: str):
 class PacketTestCase(unittest.TestCase):
     def test_decode_encode_identity(self):
         cases = [
-            # '8700036100070018092118370677',
-            "8300c6012345678912EE7"
+            # '8700036100070018092118370677\r\n',
+            "8300c6012345678912EE7\r\n"
         ]
 
         for case in cases:
@@ -27,12 +27,12 @@ class PacketTestCase(unittest.TestCase):
     def test_decode(self):
         with open(fixture_path("sample_output.txt")) as f:
             for line in f.readlines():
-                line = line.strip()
+                line = (line.strip() + "\r\n")
                 pkt = Packet.decode(line)
                 _LOGGER.info("Decoded '%s' into %s", line, pkt)
 
     def test_user_interface_packet_decode(self):
-        pkt = Packet.decode("8300c6012345678912EE7")
+        pkt = Packet.decode("8300c6012345678912EE7\r\n")
         self.assertEqual(pkt.start, 0x83)
         self.assertEqual(pkt.address, 0x00)
         self.assertEqual(pkt.length, 12)
@@ -43,7 +43,7 @@ class PacketTestCase(unittest.TestCase):
         self.assertEqual(pkt.checksum, 0xE7)
 
     def test_system_status_packet_decode(self):
-        pkt = Packet.decode("8700036100070018092118370974")
+        pkt = Packet.decode("8700036100070018092118370974\r\n")
         self.assertEqual(pkt.start, 0x87)
         self.assertEqual(pkt.address, 0x00)
         self.assertEqual(pkt.length, 3)
@@ -57,7 +57,7 @@ class PacketTestCase(unittest.TestCase):
         # self.assertEqual(pkt.checksum, 0x74)
 
     def test_decode_with_address_and_time(self):
-        pkt = Packet.decode("8709036101050018122709413536")
+        pkt = Packet.decode("8709036101050018122709413536\r\n")
         self.assertEqual(pkt.address, 0x09)
         self.assertEqual(pkt.length, 3)
         self.assertEqual(pkt.seq, 0x00)
@@ -72,7 +72,7 @@ class PacketTestCase(unittest.TestCase):
         self.assertFalse(pkt.is_user_interface_resp)
 
     def test_decode_without_address(self):
-        pkt = Packet.decode("820361230001f6")
+        pkt = Packet.decode("820361230001f6\r\n")
         self.assertIsNone(pkt.address)
         self.assertEqual(pkt.length, 3)
         self.assertEqual(pkt.seq, 0x00)
@@ -82,7 +82,7 @@ class PacketTestCase(unittest.TestCase):
         self.assertFalse(pkt.is_user_interface_resp)
 
     def test_decode_with_address(self):
-        pkt = Packet.decode("820003600000001b")
+        pkt = Packet.decode("820003600000001b\r\n")
         self.assertEqual(pkt.address, 0x00)
         self.assertEqual(pkt.length, 3)
         self.assertEqual(pkt.seq, 0x00)
@@ -100,7 +100,7 @@ class PacketTestCase(unittest.TestCase):
             timestamp=None,
         )
         self.assertEqual(pkt.length, 6)
-        self.assertEqual(pkt.encode(), "8300660A1234E49")
+        self.assertEqual(pkt.encode(), "8300660A1234E49\r\n")
 
     def test_encode_cecode2(self):
         pkt = Packet(
@@ -113,13 +113,13 @@ class PacketTestCase(unittest.TestCase):
             ),
         )
         self.assertEqual(pkt.length, 3)
-        self.assertEqual(pkt.encode(), "87000360000100180510153255E3")
+        self.assertEqual(pkt.encode(), "87000360000100180510153255E3\r\n")
 
     def test_decode_status_update_response(self):
         """
         82 00 03 60 070000 14
         """
-        pkt = Packet.decode("8200036007000014")
+        pkt = Packet.decode("8200036007000014\r\n")
         self.assertEqual(pkt.start, 0x82)
         self.assertEqual(pkt.address, 0x00)
         self.assertEqual(pkt.length, 3)
@@ -130,7 +130,7 @@ class PacketTestCase(unittest.TestCase):
         # self.assertEqual(pkt.checksum, 0x14)
 
     def test_bad_timestamp(self):
-        pkt = Packet.decode("8700036100070019022517600057")
+        pkt = Packet.decode("8700036100070019022517600057\r\n")
         self.assertEqual(pkt.start, 0x87)
         self.assertEqual(pkt.address, 0x00)
         self.assertEqual(pkt.length, 3)
@@ -143,7 +143,7 @@ class PacketTestCase(unittest.TestCase):
         )
 
     def test_decode_zone_16(self):
-        pkt = Packet.decode("8700036100160019022823032274")
+        pkt = Packet.decode("8700036100160019022823032274\r\n")
         self.assertEqual(pkt.start, 0x87)
         self.assertEqual(pkt.address, 0x00)
         self.assertEqual(pkt.length, 3)
@@ -156,7 +156,7 @@ class PacketTestCase(unittest.TestCase):
         )
 
     def test_decode_update(self):
-        pkt = Packet.decode("820003601700867e")
+        pkt = Packet.decode("820003601700867e\r\n")
         event = BaseEvent.decode(pkt)
         print(pkt)
         print(event)
