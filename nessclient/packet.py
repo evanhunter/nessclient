@@ -152,6 +152,44 @@ class Packet:
             if _data[-1:] == "?":
                 _data = _data[:-1]
 
+            # Input (to Ness) User-Interface Packets sum the
+            # ordinal of each hex character, excluding the checksum and CRLF
+            # e.g. '8300360S00E9\r\n'
+            #      Sum = 0x38 + 0x33 + 0x30 + 0x30 + 0x33 +
+            #            0x36 + 0x30 + 0x53 + 0x30 + 0x30 = 0x217
+            #      Checksum = 0x100 - (Sum & 0xff) = 0xE9
+            datasum = sum([ord(x) for x in _data[:-2]])
+            try:
+                checksum = int(_data[-2:], 16)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid non-hex character in checksum byte: {_data!r}"
+                )
+            if ((-datasum) & 0xFF) != checksum:
+                raise ValueError(f"Packet checksum does not match : {_data!r}")
+
+        else:
+            # Output (from Ness) System-Status Packet
+            # or
+            # Output (from Ness) Status Update Packet
+            #    (Response to a User-Interface Status Request Packet)
+
+            # Output packets sum the integers that each hex pair
+            # represent, excluding the checksum and CRLF
+            # e.g. '820003600000001b\r\n'
+            #      Sum = 0x82 + 0x00 + 0x03 + 0x60 + 0x00 + 0x00 + 0x00 = 0xE5
+            #      Checksum = 0x100 - (Sum & 0xff) = 0x1b
+            datasum = 0
+            for pos in range(0, len(_data), 2):
+                try:
+                    datasum += int(_data[pos : pos + 2], 16)
+                except ValueError:
+                    raise ValueError(f"Invalid non-hex character in data: {_data!r}")
+
+            if (datasum & 0xFF) != 0:
+                raise ValueError(
+                    f"Packet checksum does not match : {_data!r} {hex(datasum)}"
+                )
 
         data = DataIterator(_data)
         _LOGGER.debug("Decoding bytes: '%s'", _data)
