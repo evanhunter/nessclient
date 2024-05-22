@@ -68,11 +68,11 @@ class Server:
         _LOGGER.debug("Writing message '%s' to all clients", data)
         with self._clients_lock:
             for conn in self._clients:
-                conn.send(data.encode("utf-8") + b"\r\n")
+                conn.send(data.encode("ascii"))
 
     def _handle_incoming_data(self, data: bytes) -> None:
         _LOGGER.debug("Received incoming data: %s", data)
-        pkt = Packet.decode(data.strip().decode("utf-8"))
+        pkt = Packet.decode(data.decode("ascii"))
         _LOGGER.debug("Packet is: %s", pkt)
         # Handle Incoming Command:
         if pkt.command == CommandType.USER_INTERFACE and not pkt.is_user_interface_resp:
