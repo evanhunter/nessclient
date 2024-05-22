@@ -47,7 +47,25 @@ class Packet:
     @property
     def checksum(self) -> int:
         bytes = self.encode(with_checksum=False).strip()
-        total = sum([ord(x) for x in bytes]) & 0xFF
+
+        # Checksum is calculated differently depending on the packet type.
+        if is_user_interface_req(self.start, self.command):
+            # Input (to Ness) User-Interface Packets sum the
+            # ordinal of each hex character, excluding the checksum and CRLF
+            # e.g. '8300360S00E9\r\n'
+            #      Sum = 0x38 + 0x33 + 0x30 + 0x30 + 0x33 + 0x36 + 0x30 + 0x53 + 0x30 + 0x30 = 0x217
+            #      Checksum = (-Sum) & 0xff = 0xE9
+            total = sum([ord(x) for x in bytes])
+        else:
+            # Output (from Ness) System-Status Packets sum the
+            # integers that each hex pair represent, excluding the checksum and CRLF
+            # e.g. '820003600000001b\r\n'
+            #      Sum = 0x82 + 0x00 + 0x03 + 0x60 + 0x00 + 0x00 + 0x00 = 0xE5
+            #      Checksum = (-Sum) & 0xff = 0x1b
+            total = 0
+            for pos in range(0, len(bytes), 2):
+                total += int(bytes[pos : pos + 2], 16)
+
         return (256 - total) % 256
 
     def encode(self, with_checksum: bool = True) -> str:
