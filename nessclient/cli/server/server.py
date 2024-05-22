@@ -72,7 +72,7 @@ class Server:
 
     def _handle_incoming_data(self, data: bytes) -> None:
         _LOGGER.debug("Received incoming data: %s", data)
-        pkt = Packet.decode(data.strip().decode("utf-8"))
+        pkt = Packet.decode(data.decode("ascii"))
         _LOGGER.debug("Packet is: %s", pkt)
         # Handle Incoming Command:
         if pkt.command == CommandType.USER_INTERFACE and not pkt.is_user_interface_resp:
