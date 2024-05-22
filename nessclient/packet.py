@@ -11,6 +11,20 @@ class CommandType(Enum):
     SYSTEM_STATUS = 0x61
     USER_INTERFACE = 0x60
 
+def is_hex(s: str) -> bool:
+    valid = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F", "a", "b", "c", "d", "e", "f"]
+    for c in s:
+        if c not in valid:
+            return False
+    return True
+
+def is_valid_ui_data_char(s: str) -> bool:
+    valid = ["A", "H", "E", "X", "F", "V", "P", "D", "M", "*", "#", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "S"]
+    for c in s:
+        if c not in valid:
+            return False
+    return True
+
 
 @dataclass
 class Packet:
@@ -22,6 +36,62 @@ class Packet:
 
     # Whether or not this packet is a USER_INTERFACE response
     is_user_interface_resp: bool = False
+
+    def __init__(
+        self,
+        command: CommandType,
+        data: str,
+        address: Optional[int] = None,
+        seq: int = 0,
+        timestamp: Optional[datetime.datetime] = None,
+        is_user_interface_resp: bool = False
+    ) -> None:
+           
+        if command == CommandType.USER_INTERFACE:
+            if is_user_interface_resp:
+                # Output (from Ness) Status Update Packet: (Response to a User-Interface Status Request Packet
+                if len(data) != 6:
+                    raise ValueError(f"Data length of a User-Interface status update response must be 6 - got {len(data)}")
+                if not is_hex(data):
+                    raise ValueError(f"Data of a User-Interface status update response must be hex - got {data}")
+                if address is None:
+                    raise ValueError(f"User-Interface status update responses must have an address - got {address}")
+                if timestamp is not None:
+                    raise ValueError(f"User-Interface status update responses must not have a timestamp - got {timestamp}")
+                if seq != 0:
+                    raise ValueError(f"User-Interface status update responses do not use sequence - it must be zero - got {seq}")
+            else:
+                # Input (to Ness) User-Interface Packet:
+                if len(data) < 1 or len(data) > 30:
+                    raise ValueError(f"Data length of a User-Interface Packet must be in the range 1 - 30 - got {len(data)}")
+                if not is_valid_ui_data_char(data):
+                    raise ValueError(f"Data characters of a User-Interface Packet must be one of 'AHEXFVPDM*#01234567890S' - got {data}")
+                if address is None:
+                    raise ValueError(f"User-Interface Packet must have an address - got {address}")
+                if timestamp is not None:
+                    raise ValueError(f"User-Interface Packet must not have a timestamp - got {timestamp}")
+                if seq != 0:
+                    raise ValueError(f"User-Interface Packet do not use sequence - it must be zero - got {seq}")
+        elif command == CommandType.SYSTEM_STATUS:
+            # Output (from Ness) Event Data Packet: (see SystemStatusEvent class)
+                if len(data) != 6:
+                    raise ValueError(f"Data length of a System Status Event Data Packet must be 6 - got {len(data)}")
+                if not is_hex(data):
+                    raise ValueError(f"Data of a System Status Event Data Packet must be hex - got {data}")
+        else:
+            raise ValueError(f"Unknown command {command}")
+
+        if address is not None and (address < 0 or address > 0xf):
+            raise ValueError(f"Address must be in the range 0x0 - 0xf if provided - got {address}")
+
+        # Validated 
+        self.command = command
+        self.data = data
+        self.address = address
+        self.seq = seq
+        self.timestamp = timestamp
+        self.is_user_interface_resp = is_user_interface_resp
+
 
     @property
     def start(self) -> int:

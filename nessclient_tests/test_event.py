@@ -38,8 +38,12 @@ class BaseEventTestCase(unittest.TestCase):
         self.assertTrue(isinstance(event, StatusUpdate))
 
     def test_decode_unknown_event(self):
-        pkt = make_packet(cast(CommandType, 0x01), "000000")
-        self.assertRaises(ValueError, lambda: BaseEvent.decode(pkt))
+        self.assertRaises(ValueError, lambda: Packet(address=0, command=cast(CommandType, 0x01),
+                seq=0,
+                timestamp=None,
+                data="000000",
+                is_user_interface_resp=True,
+            ))
 
 
 class StatusUpdateTestCase(unittest.TestCase):
@@ -64,7 +68,7 @@ class StatusUpdateTestCase(unittest.TestCase):
         self.assertTrue(isinstance(event, OutputsUpdate))
 
     def test_decode_view_state_update(self):
-        pkt = make_packet(CommandType.USER_INTERFACE, "16f000")
+        pkt = make_packet(CommandType.USER_INTERFACE, "16F000")
         event = StatusUpdate.decode(pkt)
         self.assertTrue(isinstance(event, ViewStateUpdate))
 
@@ -145,7 +149,7 @@ class ZoneUpdateTestCase(unittest.TestCase):
 
 class ViewStateUpdateTestCase(unittest.TestCase):
     def test_normal_state(self):
-        pkt = make_packet(CommandType.USER_INTERFACE, "16f000")
+        pkt = make_packet(CommandType.USER_INTERFACE, "16F000")
         event = ViewStateUpdate.decode(pkt)
         self.assertEqual(event.state, ViewStateUpdate.State.NORMAL)
 
