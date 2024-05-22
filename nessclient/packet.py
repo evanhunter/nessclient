@@ -163,6 +163,12 @@ class Packet:
             # or
             # Output (from Ness) Status Update Packet (Response to a User-Interface Status Request Packet)
 
+            # Serial comms sometimes gets an extra invalid character at the start - check for that
+            if _data[0] != "8" and _data[1] == "8":
+                # Invalid start byte
+                # try dropping first character
+                _data = _data[1:]
+
             # Output packets sum the integers that each hex pair represent, excluding the checksum and CRLF
             # e.g. '820003600000001b\r\n'
             #      Sum = 0x82 + 0x00 + 0x03 + 0x60 + 0x00 + 0x00 + 0x00 = 0xE5
