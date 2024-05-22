@@ -12,6 +12,20 @@ class CommandType(Enum):
     USER_INTERFACE = 0x60
 
 
+def is_hex(s: str) -> bool:
+    for c in s:
+        if c not in "0123456789ABCDEFabcdef":
+            return False
+    return True
+
+
+def is_valid_ui_data_char(s: str) -> bool:
+    for c in s:
+        if c not in "AHEXFVPDM*#0123456789S":
+            return False
+    return True
+
+
 @dataclass
 class Packet:
     address: Optional[int]
@@ -22,6 +36,98 @@ class Packet:
 
     # Whether or not this packet is a USER_INTERFACE response
     is_user_interface_resp: bool = False
+
+    def __init__(
+        self,
+        command: CommandType,
+        data: str,
+        address: Optional[int] = None,
+        seq: int = 0,
+        timestamp: Optional[datetime.datetime] = None,
+        is_user_interface_resp: bool = False,
+    ) -> None:
+        if command == CommandType.USER_INTERFACE:
+            if is_user_interface_resp:
+                # Output (from Ness) Status Update Packet:
+                # (Response to a User-Interface Status Request Packet)
+                if len(data) != 6:
+                    raise ValueError(
+                        "Data length of a User-Interface status "
+                        f"update response must be 6 - got {len(data)}"
+                    )
+                if not is_hex(data):
+                    raise ValueError(
+                        "Data of a User-Interface status update "
+                        f"response must be hex - got {data}"
+                    )
+                if address is None:
+                    raise ValueError(
+                        "User-Interface status update responses "
+                        f"must have an address - got {address}"
+                    )
+                if timestamp is not None:
+                    raise ValueError(
+                        "User-Interface status update responses "
+                        f"must not have a timestamp - got {timestamp}"
+                    )
+                if seq != 0:
+                    raise ValueError(
+                        "User-Interface status update responses do "
+                        f"not use sequence - it must be zero - got {seq}"
+                    )
+            else:
+                # Input (to Ness) User-Interface Packet:
+                if len(data) < 1 or len(data) > 30:
+                    raise ValueError(
+                        "Data length of a User-Interface Packet "
+                        f"must be in the range 1 - 30 - got {len(data)}"
+                    )
+                if not is_valid_ui_data_char(data):
+                    raise ValueError(
+                        "Data characters of a User-Interface Packet must "
+                        f"be one of 'AHEXFVPDM*#01234567890S' - got {data}"
+                    )
+                if address is None:
+                    raise ValueError(
+                        "User-Interface Packet must have an address " f"- got {address}"
+                    )
+                if timestamp is not None:
+                    raise ValueError(
+                        "User-Interface Packet must not have a timestamp "
+                        f"- got {timestamp}"
+                    )
+                if seq != 0:
+                    raise ValueError(
+                        "User-Interface Packet do not use sequence "
+                        f"- it must be zero - got {seq}"
+                    )
+        elif command == CommandType.SYSTEM_STATUS:
+            # Output (from Ness) Event Data Packet: (see SystemStatusEvent class)
+            if len(data) != 6:
+                raise ValueError(
+                    "Data length of a System Status Event Data Packet "
+                    f"must be 6 - got {len(data)}"
+                )
+            if not is_hex(data):
+                raise ValueError(
+                    "Data of a System Status Event Data Packet must "
+                    f"be hex - got {data}"
+                )
+        else:
+            raise ValueError(f"Unknown command {command}")
+
+        if address is not None and (address < 0 or address > 0xF):
+            raise ValueError(
+                f"Address must be in the range 0x0 - 0xf if provided - got {address}"
+            )
+
+        # Validated
+        self.command = command
+        self.data = data
+        self.address = address
+        self.seq = seq
+        self.timestamp = timestamp
+        self.is_user_interface_resp = is_user_interface_resp
 
     @property
     def start(self) -> int:
