@@ -9,15 +9,10 @@ readme_path = os.path.join(os.path.dirname(
 )
 long_description = open(readme_path).read()
 
-try:
-    version = get_version()
-except Exception:
-    version = '0.0.0-dev'
-
 needs_pytest = {'pytest', 'test', 'ptr'}.intersection(sys.argv)
 pytest_runner = ['pytest-runner'] if needs_pytest else []
 
-setup(
+dist = setup(
     name='nessclient',
     packages=['nessclient', 'nessclient.cli', 'nessclient.cli.server'],
     author="Nick Whyte",
@@ -46,3 +41,8 @@ setup(
     setup_requires=[] + pytest_runner,
     tests_require=['pytest', 'pytest-asyncio'],
 )
+
+try:
+    version = dist.get_version()
+except Exception:
+    version = '0.0.0-dev'
