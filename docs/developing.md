@@ -14,7 +14,8 @@ pipenv run python setup.py test
 ## Linting
 
 ```sh
-pipenv run flake8 nessclient nessclient_tests
+pipenv run flake8 nessclient examples nessclient_tests docs *.py
+pipenv run black  nessclient examples nessclient_tests docs *.py
 ```
 
 ## Type Checking
