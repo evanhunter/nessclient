@@ -22,7 +22,7 @@ jobs:
       - name: 'Check Formatting (black)'
         run: black --check nessclient nessclient_tests
       - name: 'Check Types'
-        run: python3 -m mypy --strict nessclient
+        run: python3 -m mypy --strict nessclient examples nessclient_tests docs *.py
   build:
     name: "Build and Test"
     runs-on: ubuntu-latest
