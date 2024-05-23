@@ -12,6 +12,7 @@ flake8 = "*"
 mypy = "*"
 types-setuptools = "*"
 black = "*"
+pytest-mypy = "*"
 
 [requires]
 python_version = "3.11"

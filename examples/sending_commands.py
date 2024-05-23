@@ -20,5 +20,5 @@ loop.run_until_complete(client.aux(2))
 # output status
 loop.run_until_complete(client.send_command('S15'))
 
-client.close()
+loop.run_until_complete(client.close())
 loop.close()

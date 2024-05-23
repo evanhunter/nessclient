@@ -20,5 +20,5 @@ pipenv run flake8 nessclient nessclient_tests
 ## Type Checking
 
 ```sh
-pipenv run mypy --strict nessclient
+pipenv run mypy --strict nessclient examples nessclient_tests docs
 ```
