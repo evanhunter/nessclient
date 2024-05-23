@@ -3,9 +3,9 @@ import sys
 
 from setuptools import setup
 
-readme_path = os.path.join(os.path.dirname(
-    os.path.abspath(__file__)),
-    'README.md',
+readme_path = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "README.md",
 )
 long_description = open(readme_path).read()
 
@@ -21,17 +21,17 @@ setup(
     name='nessclient',
     packages=['nessclient', 'nessclient.cli', 'nessclient.cli.server'],
     author="Nick Whyte",
-    author_email='nick@nickwhyte.com',
+    author_email="nick@nickwhyte.com",
     description="Implementation/abstraction of the Ness D8x / D16x Serial "
-                "Interface ASCII protocol",
+    "Interface ASCII protocol",
     long_description=long_description,
-    long_description_content_type='text/markdown',
-    url='https://github.com/nickw444/nessclient',
+    long_description_content_type="text/markdown",
+    url="https://github.com/nickw444/nessclient",
     zip_safe=False,
     classifiers=[
-        'Intended Audience :: Developers',
-        'Programming Language :: Python',
-        'License :: OSI Approved :: MIT License',
+        "Intended Audience :: Developers",
+        "Programming Language :: Python",
+        "License :: OSI Approved :: MIT License",
     ],
     install_requires=[
         'justbackoff',
@@ -42,9 +42,9 @@ setup(
         'cli': ['click']
     },
     entry_points={
-        'console_scripts': ['ness-cli=nessclient.cli.__main__:cli'],
+        "console_scripts": ["ness-cli=nessclient.cli.__main__:cli"],
     },
-    test_suite='nessclient_tests',
+    test_suite="nessclient_tests",
     setup_requires=[] + pytest_runner,
-    tests_require=['pytest', 'pytest-asyncio'],
+    tests_require=["pytest", "pytest-asyncio"],
 )
