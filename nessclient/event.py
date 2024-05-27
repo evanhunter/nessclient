@@ -123,7 +123,7 @@ class SystemStatusEvent(BaseEvent):
             seq=(1 if self.sequence else 0),
             command=CommandType.SYSTEM_STATUS,
             data=data,
-            timestamp=None,
+            timestamp=self.timestamp,
             is_user_interface_resp=False,
         )
 
