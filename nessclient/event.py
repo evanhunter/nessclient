@@ -105,7 +105,18 @@ class SystemStatusEvent(BaseEvent):
     @classmethod
     def decode(cls, packet: Packet) -> "SystemStatusEvent":
         event_type = int(packet.data[0:2], 16)
-        zone = int(packet.data[2:4])
+        if packet.data[2:4].upper() == "F0" and SystemStatusEvent.EventType(
+            event_type
+        ) in [
+            SystemStatusEvent.EventType.ALARM,
+            SystemStatusEvent.EventType.ALARM_RESTORE,
+            SystemStatusEvent.EventType.TAMPER_UNSEALED,
+            SystemStatusEvent.EventType.TAMPER_NORMAL,
+        ]:
+            # These types violate the decimal ID field by having a hex 0xf0 value instead
+            zone = int(packet.data[2:4], 16)
+        else:
+            zone = int(packet.data[2:4])
         area = int(packet.data[4:6], 16)
         return SystemStatusEvent(
             type=SystemStatusEvent.EventType(event_type),
@@ -117,7 +128,16 @@ class SystemStatusEvent(BaseEvent):
         )
 
     def encode(self) -> Packet:
-        data = "{:02x}{:02x}{:02x}".format(self.type.value, self.zone, self.area)
+        if self.zone == 0xF0 and SystemStatusEvent.EventType(self.type) in [
+            SystemStatusEvent.EventType.ALARM,
+            SystemStatusEvent.EventType.ALARM_RESTORE,
+            SystemStatusEvent.EventType.TAMPER_UNSEALED,
+            SystemStatusEvent.EventType.TAMPER_NORMAL,
+        ]:
+            # These types violate the decimal ID field by having a hex 0xf0 value instead
+            data = "{:02x}{:02x}{:02x}".format(self.type.value, self.zone, self.area)
+        else:
+            data = "{:02x}{:02d}{:02x}".format(self.type.value, self.zone, self.area)
         return Packet(
             address=self.address,
             seq=(1 if self.sequence else 0),
