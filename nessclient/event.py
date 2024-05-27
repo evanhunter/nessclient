@@ -150,25 +150,25 @@ class SystemStatusEvent(BaseEvent):
 
 class StatusUpdate(BaseEvent):
     class RequestID(Enum):
-        ZONE_INPUT_UNSEALED = 0x0
-        ZONE_RADIO_UNSEALED = 0x1
-        ZONE_CBUS_UNSEALED = 0x2
-        ZONE_IN_DELAY = 0x3
-        ZONE_IN_DOUBLE_TRIGGER = 0x4
-        ZONE_IN_ALARM = 0x5
-        ZONE_EXCLUDED = 0x6
-        ZONE_AUTO_EXCLUDED = 0x7
-        ZONE_SUPERVISION_FAIL_PENDING = 0x8
-        ZONE_SUPERVISION_FAIL = 0x9
-        ZONE_DOORS_OPEN = 0x10
-        ZONE_DETECTOR_LOW_BATTERY = 0x11
-        ZONE_DETECTOR_TAMPER = 0x12
-        MISCELLANEOUS_ALARMS = 0x13
-        ARMING = 0x14
-        OUTPUTS = 0x15
-        VIEW_STATE = 0x16
-        PANEL_VERSION = 0x17
-        AUXILIARY_OUTPUTS = 0x18
+        ZONE_INPUT_UNSEALED = 0
+        ZONE_RADIO_UNSEALED = 1
+        ZONE_CBUS_UNSEALED = 2
+        ZONE_IN_DELAY = 3
+        ZONE_IN_DOUBLE_TRIGGER = 4
+        ZONE_IN_ALARM = 5
+        ZONE_EXCLUDED = 6
+        ZONE_AUTO_EXCLUDED = 7
+        ZONE_SUPERVISION_FAIL_PENDING = 8
+        ZONE_SUPERVISION_FAIL = 9
+        ZONE_DOORS_OPEN = 10
+        ZONE_DETECTOR_LOW_BATTERY = 11
+        ZONE_DETECTOR_TAMPER = 12
+        MISCELLANEOUS_ALARMS = 13
+        ARMING = 14
+        OUTPUTS = 15
+        VIEW_STATE = 16
+        PANEL_VERSION = 17
+        AUXILIARY_OUTPUTS = 18
 
     def __init__(
         self,
@@ -181,7 +181,7 @@ class StatusUpdate(BaseEvent):
 
     @classmethod
     def decode(self, packet: Packet) -> "StatusUpdate":
-        request_id = StatusUpdate.RequestID(int(packet.data[0:2], 16))
+        request_id = StatusUpdate.RequestID(int(packet.data[0:2]))
         if request_id.name.startswith("ZONE"):
             return ZoneUpdate.decode(packet)
         elif request_id == StatusUpdate.RequestID.MISCELLANEOUS_ALARMS:
@@ -236,7 +236,7 @@ class ZoneUpdate(StatusUpdate):
 
     @classmethod
     def decode(cls, packet: Packet) -> "ZoneUpdate":
-        request_id = StatusUpdate.RequestID(int(packet.data[0:2], 16))
+        request_id = StatusUpdate.RequestID(int(packet.data[0:2]))
         return ZoneUpdate(
             request_id=request_id,
             included_zones=unpack_unsigned_short_data_enum(packet, ZoneUpdate.Zone),
@@ -245,7 +245,7 @@ class ZoneUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        data = "{:02x}{}".format(
+        data = "{:02d}{}".format(
             self.request_id.value,
             pack_unsigned_short_data_enum(self.included_zones),
         )
@@ -309,7 +309,7 @@ class MiscellaneousAlarmsUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        data = "{:02x}{}".format(
+        data = "{:02d}{}".format(
             self.request_id.value,
             pack_unsigned_short_data_enum(self.included_alarms),
         )
@@ -369,7 +369,7 @@ class ArmingUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        data = "{:02x}{}".format(
+        data = "{:02d}{}".format(
             self.request_id.value,
             pack_unsigned_short_data_enum(self.status),
         )
@@ -433,7 +433,7 @@ class OutputsUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        data = "{:02x}{}".format(
+        data = "{:02d}{}".format(
             self.request_id.value,
             pack_unsigned_short_data_enum(self.outputs),
         )
@@ -481,7 +481,7 @@ class ViewStateUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        data = "{:02x}{:04x}".format(self.request_id.value, self.state.value)
+        data = "{:02d}{:04x}".format(self.request_id.value, self.state.value)
         return Packet(
             address=self.address,
             seq=0x00,
@@ -532,7 +532,7 @@ class PanelVersionUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        data = "{:02x}{:02x}{:x}{:x}".format(
+        data = "{:02d}{:02x}{:x}{:x}".format(
             self.request_id.value,
             self.model.value,
             self.major_version,
@@ -583,7 +583,7 @@ class AuxiliaryOutputsUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        data = "{:02x}{}".format(
+        data = "{:02d}{}".format(
             self.request_id.value,
             pack_unsigned_short_data_enum(self.outputs),
         )
