@@ -67,7 +67,13 @@ class Packet:
             data += self.timestamp.strftime("%y%m%d%H%M%S")
 
         if with_checksum:
-            data += "{:02x}".format(self.checksum).upper()
+            checksum_str = "{:02x}".format(self.checksum)
+            if is_user_interface_req(self.start, self.command):
+                # NOTE: Checksum for UI Input Request packets MUST be upper case
+                #       Otherwise packets will be ignored by NESS
+                data += checksum_str.upper()
+            else:
+                data += checksum_str
 
         return data
 
