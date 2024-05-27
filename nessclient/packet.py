@@ -67,7 +67,7 @@ class Packet:
             data += self.timestamp.strftime("%y%m%d%H%M%S")
 
         if with_checksum:
-            data += "{:02x}".format(self.checksum).upper()
+            data += "{:02x}".format(self.checksum)
 
         return data
 

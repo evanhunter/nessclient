@@ -22,7 +22,7 @@ class PacketTestCase(unittest.TestCase):
     def test_decode_encode_identity(self):
         cases = [
             # '8700036100070018092118370677',
-            "8300c6012345678912EE7"
+            "8300c6012345678912Ee7"
         ]
 
         for case in cases:
