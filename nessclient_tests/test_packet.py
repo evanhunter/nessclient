@@ -113,12 +113,11 @@ class PacketTestCase(unittest.TestCase):
             seq=0x00,
             command=CommandType.USER_INTERFACE,
             data="000100",
-            timestamp=datetime.datetime(
-                year=2018, month=5, day=10, hour=15, minute=32, second=55
-            ),
+            timestamp=None,
         )
-        self.assertEqual(pkt.length, 3)
-        self.assertEqual(pkt.encode(), "87000360000100180510153255E3")
+        self.assertEqual(pkt.length, 6)
+        self.assertEqual(pkt.encode(), "830066000010078")
+        self.assertEqual(Packet.decode(pkt.encode()), pkt)
 
     def test_decode_status_update_response(self):
         """
