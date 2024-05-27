@@ -10,6 +10,11 @@ from .fixtures.real_captured_test_data import (
     Output_From_Ness_Event_Data_Real_Packets,
     Output_From_Ness_Status_Update_Real_Packets,
 )
+from .fixtures.generate_test_packets import (
+    Gemerate_Input_To_Ness_User_Interface_Valid_Packets,
+    Gemerate_Output_From_Ness_Event_Data_Valid_Packets,
+    Gemerate_Output_From_Ness_Status_Update_Valid_Packets,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -180,3 +185,24 @@ class PacketTestRealPackets(unittest.TestCase):
             event = BaseEvent.decode(pkt)
             self.assertTrue(isinstance(event, StatusUpdate))
             self.assertEqual(event.encode().encode().encode("ascii") + b"\r\n", pktdata)
+
+
+class PacketTestGeneratedPackets(unittest.TestCase):
+    def test_decode_encode_generated_ui_input_packets(self) -> None:
+        for pktdata, desc in Gemerate_Input_To_Ness_User_Interface_Valid_Packets():
+            pkt = Packet.decode(pktdata)
+            self.assertEqual(pkt.encode(), pktdata)
+
+    def test_decode_encode_generated_ui_response_packets(self) -> None:
+        for pktdata, desc in Gemerate_Output_From_Ness_Status_Update_Valid_Packets():
+            pkt = Packet.decode(pktdata)
+            event = BaseEvent.decode(pkt)
+            self.assertTrue(isinstance(event, StatusUpdate))
+            self.assertEqual(pkt.encode(), pktdata)
+
+    def test_decode_encode_generated_status_packets(self) -> None:
+        for pktdata, desc in Gemerate_Output_From_Ness_Event_Data_Valid_Packets():
+            pkt = Packet.decode(pktdata)
+            event = BaseEvent.decode(pkt)
+            self.assertTrue(isinstance(event, SystemStatusEvent))
+            self.assertEqual(event.encode().encode(), pktdata)
