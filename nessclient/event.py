@@ -179,6 +179,9 @@ class StatusUpdate(BaseEvent):
         else:
             raise ValueError("Unhandled request_id case: {}".format(request_id))
 
+    def encode(self) -> Packet:
+        raise NotImplementedError(f"Encode not supported for {self.request_id.name}")
+
 
 class ZoneUpdate(StatusUpdate):
     class Zone(Enum):
@@ -283,6 +286,20 @@ class MiscellaneousAlarmsUpdate(StatusUpdate):
             ),
             timestamp=packet.timestamp,
             address=packet.address,
+        )
+
+    def encode(self) -> Packet:
+        data = "{:02x}{}".format(
+            self.request_id.value,
+            pack_unsigned_short_data_enum(self.included_alarms),
+        )
+        return Packet(
+            address=self.address,
+            seq=0x00,
+            command=CommandType.USER_INTERFACE,
+            data=data,
+            timestamp=None,
+            is_user_interface_resp=True,
         )
 
 
@@ -395,6 +412,20 @@ class OutputsUpdate(StatusUpdate):
             address=packet.address,
         )
 
+    def encode(self) -> Packet:
+        data = "{:02x}{}".format(
+            self.request_id.value,
+            pack_unsigned_short_data_enum(self.outputs),
+        )
+        return Packet(
+            address=self.address,
+            seq=0x00,
+            command=CommandType.USER_INTERFACE,
+            data=data,
+            timestamp=None,
+            is_user_interface_resp=True,
+        )
+
 
 class ViewStateUpdate(StatusUpdate):
     class State(Enum):
@@ -427,6 +458,17 @@ class ViewStateUpdate(StatusUpdate):
             state=state,
             timestamp=packet.timestamp,
             address=packet.address,
+        )
+
+    def encode(self) -> Packet:
+        data = "{:02x}{:04x}".format(self.request_id.value, self.state.value)
+        return Packet(
+            address=self.address,
+            seq=0x00,
+            command=CommandType.USER_INTERFACE,
+            data=data,
+            timestamp=None,
+            is_user_interface_resp=True,
         )
 
 
@@ -469,6 +511,22 @@ class PanelVersionUpdate(StatusUpdate):
             address=packet.address,
         )
 
+    def encode(self) -> Packet:
+        data = "{:02x}{:02x}{:x}{:x}".format(
+            self.request_id.value,
+            self.model.value,
+            self.major_version,
+            self.minor_version,
+        )
+        return Packet(
+            address=self.address,
+            seq=0x00,
+            command=CommandType.USER_INTERFACE,
+            data=data,
+            timestamp=None,
+            is_user_interface_resp=True,
+        )
+
 
 class AuxiliaryOutputsUpdate(StatusUpdate):
     class OutputType(Enum):
@@ -502,4 +560,18 @@ class AuxiliaryOutputsUpdate(StatusUpdate):
             ),
             timestamp=packet.timestamp,
             address=packet.address,
+        )
+
+    def encode(self) -> Packet:
+        data = "{:02x}{}".format(
+            self.request_id.value,
+            pack_unsigned_short_data_enum(self.outputs),
+        )
+        return Packet(
+            address=self.address,
+            seq=0x00,
+            command=CommandType.USER_INTERFACE,
+            data=data,
+            timestamp=None,
+            is_user_interface_resp=True,
         )
