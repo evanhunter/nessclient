@@ -28,32 +28,33 @@ class AlarmServer:
         self._port = port
         self._simulation_running = False
 
-    def start(self) -> None:
+    def start(self, interactive: bool = True) -> None:
         self._server.start(host=self._host, port=self._port)
         self._start_simulation()
 
-        while True:
-            command = input("Command: ")
-            if command is None:
-                continue
+        if interactive:
+            while True:
+                command = input("Command: ")
+                if command is None:
+                    continue
 
-            command = command.upper().strip()
-            if command == "D":
-                self._alarm.disarm()
-            elif command == "A" or command == "AA":
-                self._alarm.arm(Alarm.ArmingMode.ARMED_AWAY)
-            elif command == "AH":
-                self._alarm.arm(Alarm.ArmingMode.ARMED_HOME)
-            elif command == "AD":
-                self._alarm.arm(Alarm.ArmingMode.ARMED_DAY)
-            elif command == "AN":
-                self._alarm.arm(Alarm.ArmingMode.ARMED_NIGHT)
-            elif command == "AV":
-                self._alarm.arm(Alarm.ArmingMode.ARMED_VACATION)
-            elif command == "T":
-                self._alarm.trip()
+                command = command.upper().strip()
+                if command == "D":
+                    self._alarm.disarm()
+                elif command == "A" or command == "AA":
+                    self._alarm.arm(Alarm.ArmingMode.ARMED_AWAY)
+                elif command == "AH":
+                    self._alarm.arm(Alarm.ArmingMode.ARMED_HOME)
+                elif command == "AD":
+                    self._alarm.arm(Alarm.ArmingMode.ARMED_DAY)
+                elif command == "AN":
+                    self._alarm.arm(Alarm.ArmingMode.ARMED_NIGHT)
+                elif command == "AV":
+                    self._alarm.arm(Alarm.ArmingMode.ARMED_VACATION)
+                elif command == "T":
+                    self._alarm.trip()
 
-            print(command)
+                print(command)
 
     def _alarm_state_changed(
         self,
