@@ -20,6 +20,10 @@ class AlarmServer:
             zone_state_changed=self._zone_state_changed,
         )
         self._server = Server(handle_command=self._handle_command)
+        if not isinstance(host, str):
+            raise ValueError("Host must be a valid string")
+        if not isinstance(port, int) or port < 0 or port > 65535:
+            raise ValueError("Host must be a valid integer 0-65535")
         self._host = host
         self._port = port
         self._simulation_running = False
