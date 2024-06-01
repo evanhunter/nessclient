@@ -39,7 +39,9 @@ class Client:
             elif serial_tty is not None:
                 connection = Serial232Connection(tty_path=serial_tty)
             else:
-                raise ValueError("Must provide host+port or serial_tty or connection object")
+                raise ValueError(
+                    "Must provide host+port or serial_tty or connection object"
+                )
 
         if alarm is None:
             alarm = Alarm(infer_arming_state=infer_arming_state)
