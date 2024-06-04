@@ -19,16 +19,18 @@ def Gemerate_Input_To_Ness_User_Interface_Valid_Packets() -> list[tuple[str, str
     Input_To_Ness_User_Interface_Valid_Packets: list[tuple[str, str]] = []
     data = "AHEXFVPDM*#0123456789SAHEXFVPD"
     for address in range(0x0, 0xF + 1):
-        for length in range(1, 30 + 1):
-            packet = f"83{address:x}{length:02x}60{data[0:length]}"
-            checksum = (256 - sum([ord(x) for x in packet])) % 256
-            packet = f"{packet}{checksum:02X}\r\n"
-            Input_To_Ness_User_Interface_Valid_Packets.append(
-                (
-                    packet,
-                    f"Input UI request to address {address} with {length} bytes of data",
+        for delay_marker in ["", "?"]:
+            for length in range(1, 30 + 1):
+                packet = f"83{address:x}{length:02x}60{data[0:length]}"
+                checksum = (256 - sum([ord(x) for x in packet])) % 256
+                packet = f"{packet}{checksum:02X}{delay_marker}\r\n"
+                Input_To_Ness_User_Interface_Valid_Packets.append(
+                    (
+                        packet,
+                        f"Input UI request to address {address}"
+                        f"with {length} bytes of data",
+                    )
                 )
-            )
     return Input_To_Ness_User_Interface_Valid_Packets
 
 

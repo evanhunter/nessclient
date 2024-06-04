@@ -33,6 +33,7 @@ class Packet:
     command: CommandType
     data: str
     timestamp: Optional[datetime.datetime]
+    has_delay_marker: bool
 
     # Whether or not this packet is a USER_INTERFACE response
     is_user_interface_resp: bool = False
@@ -45,6 +46,7 @@ class Packet:
         seq: int = 0,
         timestamp: Optional[datetime.datetime] = None,
         is_user_interface_resp: bool = False,
+        has_delay_marker: bool = False,
     ) -> None:
         if command == CommandType.USER_INTERFACE:
             if is_user_interface_resp:
@@ -74,6 +76,11 @@ class Packet:
                     raise ValueError(
                         "User-Interface status update responses do "
                         f"not use sequence - it must be zero - got {seq}"
+                    )
+                if has_delay_marker:
+                    raise ValueError(
+                        "User-Interface status update responses do "
+                        "not use delay markers"
                     )
             else:
                 # Input (to Ness) User-Interface Packet:
@@ -113,6 +120,10 @@ class Packet:
                     "Data of a System Status Event Data Packet must "
                     f"be hex - got {data}"
                 )
+            if has_delay_marker:
+                raise ValueError(
+                    "System Status Event Data Packet must " "not use delay markers"
+                )
         else:
             raise ValueError(f"Unknown command {command}")
 
@@ -128,6 +139,7 @@ class Packet:
         self.seq = seq
         self.timestamp = timestamp
         self.is_user_interface_resp = is_user_interface_resp
+        self.has_delay_marker = has_delay_marker
 
     @property
     def start(self) -> int:
@@ -200,6 +212,8 @@ class Packet:
             else:
                 data += checksum_str
 
+            data += "?" if self.has_delay_marker else ""
+
         return data + "\r\n"
 
     @classmethod
@@ -240,9 +254,7 @@ class Packet:
             )
         _data = _data[:-2]
 
-        # TODO(NW): Figure out checksum validation
-        # if not is_data_valid(_data.decode('ascii')):
-        #     raise ValueError("Unable to decode: checksum verification failed")
+        has_delay_marker = False
 
         # Decoding of Length requires knowledge of the packet type, which
         # normally is specified by the start byte and command type.
@@ -259,6 +271,7 @@ class Packet:
             # Check for, and remove the delay marker
             if _data[-1:] == "?":
                 _data = _data[:-1]
+                has_delay_marker = True
 
             # Input (to Ness) User-Interface Packets sum the
             # ordinal of each hex character, excluding the checksum and CRLF
@@ -272,6 +285,10 @@ class Packet:
             except ValueError:
                 raise ValueError(
                     f"Invalid non-hex character in checksum byte: {_data!r}"
+                )
+            if f"{checksum:02X}" != _data[-2:]:
+                raise ValueError(
+                    f"Packet checksum for input request must be upper case : {_data!r}"
                 )
             if ((-datasum) & 0xFF) != checksum:
                 raise ValueError(f"Packet checksum does not match : {_data!r}")
@@ -330,6 +347,7 @@ class Packet:
             command=command,
             data=msg_data,
             timestamp=timestamp,
+            has_delay_marker=has_delay_marker,
         )
 
 
@@ -349,9 +367,6 @@ class DataIterator:
 
     def take_hex(self, half: bool = False) -> int:
         return int(self.take_bytes(1, half), 16)
-
-    def take_dec(self, half: bool = False) -> int:
-        return int(self.take_bytes(1, half), 10)
 
     def is_consumed(self) -> bool:
         return self._position >= len(self._data)

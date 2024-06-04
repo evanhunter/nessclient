@@ -41,6 +41,241 @@ class PacketTestCase(unittest.TestCase):
                 pkt = Packet.decode(line)
                 _LOGGER.info("Decoded '%s' into %s", line, pkt)
 
+    def test_create_bad_packets(self) -> None:
+        # Bad Input (to Ness) User-Interface Packets
+        # Zero Length
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(address=0, command=CommandType.USER_INTERFACE, data=""),
+        )
+        # Too Long (37 chars)
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0,
+                command=CommandType.USER_INTERFACE,
+                data="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            ),
+        )
+        # Has a disallowed 'B' character
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0, command=CommandType.USER_INTERFACE, data="B2345678912E"
+            ),
+        )
+        # Has a disallowed '\xAA' character
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0, command=CommandType.USER_INTERFACE, data="\xAA2345678912E"
+            ),
+        )
+        # Has address = None
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=None, command=CommandType.USER_INTERFACE, data="12345678912E"
+            ),
+        )
+        # Has a Timestamp (not allowed)
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0,
+                command=CommandType.USER_INTERFACE,
+                timestamp=datetime.datetime(
+                    year=2018, month=9, day=21, hour=18, minute=37, second=9
+                ),
+                data="12345678912E",
+            ),
+        )
+        # Has a non-zero sequence
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0,
+                command=CommandType.USER_INTERFACE,
+                data="12345678912E",
+                seq=1,
+            ),
+        )
+        # Address too large
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=30, command=CommandType.USER_INTERFACE, data="12345678912E"
+            ),
+        )
+
+        # Bad Output (from Ness) Status Update Packets
+        # (Response to a User-Interface Status Request Packet)
+        # Wrong length (!=6)
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0,
+                command=CommandType.USER_INTERFACE,
+                data="0000000000",
+                is_user_interface_resp=True,
+            ),
+        )
+        # Non-Hex character 'X'
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0,
+                command=CommandType.USER_INTERFACE,
+                data="X00000",
+                is_user_interface_resp=True,
+            ),
+        )
+        # Has address = None
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=None,
+                command=CommandType.USER_INTERFACE,
+                data="000000",
+                is_user_interface_resp=True,
+            ),
+        )
+        # Has a Timestamp (not allowed)
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0,
+                command=CommandType.USER_INTERFACE,
+                timestamp=datetime.datetime(
+                    year=2018, month=9, day=21, hour=18, minute=37, second=9
+                ),
+                data="000000",
+                is_user_interface_resp=True,
+            ),
+        )
+        # Has a non-zero sequence
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0,
+                command=CommandType.USER_INTERFACE,
+                data="000000",
+                is_user_interface_resp=True,
+                seq=1,
+            ),
+        )
+        # Address too large
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=30,
+                command=CommandType.USER_INTERFACE,
+                data="000000",
+                is_user_interface_resp=True,
+            ),
+        )
+        # Has dis-allowed delay marker
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0,
+                command=CommandType.USER_INTERFACE,
+                data="000000",
+                is_user_interface_resp=True,
+                has_delay_marker=True,
+            ),
+        )
+
+        # Bad Output (from Ness) Event Data Packets
+        # Wrong length (!=6)
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0, command=CommandType.SYSTEM_STATUS, data="0000000000"
+            ),
+        )
+        # Non-Hex character 'X'
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(address=0, command=CommandType.SYSTEM_STATUS, data="X00000"),
+        )
+        # Address too large
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=30, command=CommandType.SYSTEM_STATUS, data="000000"
+            ),
+        )
+        # Has dis-allowed delay marker
+        self.assertRaises(
+            ValueError,
+            lambda: Packet(
+                address=0,
+                command=CommandType.SYSTEM_STATUS,
+                data="000000",
+                has_delay_marker=True,
+            ),
+        )
+
+    def test_decode_bad_packets(self) -> None:
+        cases = [
+            # UI request packets
+            "8300c60",  # short packet truncated
+            "8300c6012345678912EE7",  # missing CRLF
+            "8300f6012345678912EE4\r\n",  # length too long for data
+            "830056012345678912E15\r\n",  # length too short for data
+            "8300c6012345678912EX7\r\n",  # Non Hex character in checksum
+            "8300c6012345678912EE8\r\n",  # Bad checksum (should be E7)
+            "8300c6012345678912Ee7\r\n",  # Bad checksum (must be upper case)
+            "8300c60B2345678912E42A\r\n",  # Has a disallowed 'B' character
+            "8300c60\xAA2345678912E92\r\n",  # Has a disallowed '\xAA' character
+            "83000609F\r\n",  # Zero length
+            "8302560AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA33\r\n",  # 37 length  (too long)
+            # Bad Output (from Ness) Status Update Packets
+            # Bad checksum
+            "820003600000001a\r\n",
+            # Wrong length (!=6)
+            "82000460000000001a\r\n",
+            # Non-Hex character 'X'
+            # checksum is also wrong, since it can't be calculated here
+            "82000360X000001b\r\n",
+            # Has a Timestamp (not allowed)
+            "82000360000000061201074300b8\r\n",
+            # Has a non-zero sequence
+            "820083600000009b\r\n",
+            # Address too large
+            "8215036000000006\r\n",
+            # Has dis-allowed delay marker
+            "820003600000001b?\r\n",
+            # Bad Output (from Ness) Event Data Packets
+            # Bad checksum
+            "8204610000000018\r\n"
+            "830004610000000017\r\n"
+            "860461000000180921183709007a\r\n"
+            "870004610000001809211837090079\r\n"
+            # Wrong length (!=6)
+            "8204610000000019\r\n"
+            "830004610000000018\r\n"
+            "860461000000180921183709007b\r\n"
+            "87000461000000180921183709007a\r\n"
+            # Non-Hex character 'X'
+            # checksum is also wrong, since it can't be calculated here
+            "820361X000001a\r\n"
+            "83000361X0000019\r\n"
+            "860361X000001809211837097c\r\n"
+            "87000361X000001809211837097b\r\n"
+            # Address too large
+            "8315036100000004\r\n" "8715036100000018092118370966\r\n"
+            # Has dis-allowed delay marker
+            "8203610000001a?\r\n"
+            "8300036100000019?\r\n"
+            "8603610000001809211837097c?\r\n"
+            "870003610000001809211837097b?\r\n",
+        ]
+
+        for case in cases:
+            self.assertRaises(ValueError, lambda: Packet.decode(case))
+
     def test_user_interface_packet_decode(self) -> None:
         pkt = Packet.decode("8300c6012345678912EE7\r\n")
         self.assertEqual(pkt.start, 0x83)

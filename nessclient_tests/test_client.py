@@ -1,7 +1,7 @@
 from unittest.mock import Mock, AsyncMock
 
 import pytest
-
+import unittest
 from nessclient import Client
 from nessclient.alarm import Alarm
 from nessclient.connection import Connection
@@ -118,6 +118,12 @@ def test_on_zone_change_callback_is_registered(client: Client, alarm: Mock) -> N
     client.on_zone_change(cb)
     assert alarm.on_zone_change.call_count == 1
     assert alarm.on_zone_change.call_args[0][0] == cb
+
+
+class ClientTestCase(unittest.TestCase):
+    def test_bad_args(self) -> None:
+        self.assertRaises(ValueError, lambda: Client(host=None, port=1234))
+        self.assertRaises(ValueError, lambda: Client(host="test123", port=None))
 
 
 @pytest.mark.asyncio
