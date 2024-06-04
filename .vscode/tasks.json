@@ -1,0 +1,44 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run Tests",
+            "type": "shell",
+            "command": "pipenv run pytest",
+            "problemMatcher": []
+        },
+        {
+            "label": "Lint : Black & Flake8",
+            "type": "shell",
+            "command": "pipenv run black  nessclient examples nessclient_tests docs *.py && pipenv run flake8 nessclient examples nessclient_tests docs *.py",
+            "problemMatcher": []
+        },
+        {
+            "label": "Check types",
+            "type": "shell",
+            "command": "pipenv run mypy --strict nessclient examples nessclient_tests docs",
+            "problemMatcher": []
+        },
+        {
+            "label": "Setup Pipenv",
+            "type": "shell",
+            "command": "pip install pipenv --user && pipenv install --dev",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build docs",
+            "type": "shell",
+            "command": "pipenv install sphinx m2r && pipenv run make -C docs singlehtml",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build Distributable",
+            "type": "shell",
+            "command": "pipenv run python setup.py sdist bdist_wheel",
+            "problemMatcher": []
+        },
+        
+    ]
+}
