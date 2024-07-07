@@ -172,7 +172,7 @@ class StatusUpdate(BaseEvent):
 
     def __init__(
         self,
-        request_id: "StatusUpdate.RequestID",
+        request_id: RequestID,
         address: Optional[int],
         timestamp: Optional[datetime.datetime],
     ) -> None:
@@ -204,7 +204,18 @@ class StatusUpdate(BaseEvent):
 
 
 class ZoneUpdate(StatusUpdate):
+    """
+    A type of  Output (from Ness) Status Update Packet:
+    (Response to a User-Interface Status Request Packet)
+    Represents one of the 13 types of Status Update Packet that refer to zones
+    """
+
     class Zone(Enum):
+        """
+        An enumeration representing a 2 byte Zone bitfield
+        Values listed in Form 4 of Ness D8x D16x Serial Interface - ASCII Protocol - v13
+        """
+
         ZONE_1 = 0x0100
         ZONE_2 = 0x0200
         ZONE_3 = 0x0400
@@ -224,8 +235,8 @@ class ZoneUpdate(StatusUpdate):
 
     def __init__(
         self,
-        included_zones: List["ZoneUpdate.Zone"],
-        request_id: "StatusUpdate.RequestID",
+        included_zones: List[Zone],
+        request_id: StatusUpdate.RequestID,
         address: Optional[int],
         timestamp: Optional[datetime.datetime],
     ) -> None:
@@ -262,6 +273,9 @@ class ZoneUpdate(StatusUpdate):
 class MiscellaneousAlarmsUpdate(StatusUpdate):
     class AlarmType(Enum):
         """
+        An enumeration representing a 2 byte Miscellaneous Alarms bitfield
+        Values listed in Form 20 of Ness D8x D16x Serial Interface - ASCII Protocol - v13
+
         Note: The ness provided documentation has the byte endianness
         incorrectly documented. For this reason, these enum values have
         reversed byte ordering compared to the ness provided documentation.
@@ -286,7 +300,7 @@ class MiscellaneousAlarmsUpdate(StatusUpdate):
 
     def __init__(
         self,
-        included_alarms: List["MiscellaneousAlarmsUpdate.AlarmType"],
+        included_alarms: List[AlarmType],
         address: Optional[int],
         timestamp: Optional[datetime.datetime],
     ):

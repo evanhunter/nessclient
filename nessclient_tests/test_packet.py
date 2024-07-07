@@ -6,17 +6,23 @@ from os import path
 from nessclient import BaseEvent
 from nessclient.event import SystemStatusEvent, StatusUpdate
 from nessclient.packet import Packet, CommandType
-from .fixtures.real_captured_test_data import (
+from nessclient_tests.fixtures.real_captured_test_data import (
     Output_From_Ness_Event_Data_Real_Packets,
     Output_From_Ness_Status_Update_Real_Packets,
 )
-from .fixtures.generate_test_packets import (
+from nessclient_tests.fixtures.generate_test_packets import (
     Gemerate_Input_To_Ness_User_Interface_Valid_Packets,
     Gemerate_Output_From_Ness_Event_Data_Valid_Packets,
     Gemerate_Output_From_Ness_Status_Update_Valid_Packets,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+logging.basicConfig(
+    format="%(asctime)s.%(msecs)03d %(threadName)-25s %(levelname)-8s %(message)s",
+    level=logging.DEBUG,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 def fixture_path(fixture_name: str) -> str:
@@ -25,10 +31,7 @@ def fixture_path(fixture_name: str) -> str:
 
 class PacketTestCase(unittest.TestCase):
     def test_decode_encode_identity(self) -> None:
-        cases = [
-            # '8700036100070018092118370677\r\n',
-            "8300c6012345678912EE7\r\n"
-        ]
+        cases = ["8300C6012345678912E07\r\n"]
 
         for case in cases:
             pkt = Packet.decode(case)
@@ -277,7 +280,7 @@ class PacketTestCase(unittest.TestCase):
             self.assertRaises(ValueError, lambda: Packet.decode(case))
 
     def test_user_interface_packet_decode(self) -> None:
-        pkt = Packet.decode("8300c6012345678912EE7\r\n")
+        pkt = Packet.decode("8300C6012345678912E07\r\n")
         self.assertEqual(pkt.start, 0x83)
         self.assertEqual(pkt.address, 0x00)
         self.assertEqual(pkt.length, 12)
@@ -285,7 +288,7 @@ class PacketTestCase(unittest.TestCase):
         self.assertEqual(pkt.command, CommandType.USER_INTERFACE)
         self.assertEqual(pkt.data, "12345678912E")
         self.assertIsNone(pkt.timestamp)
-        self.assertEqual(pkt.checksum, 0xE7)
+        self.assertEqual(pkt.checksum, 0x07)
 
     def test_system_status_packet_decode(self) -> None:
         pkt = Packet.decode("8700036100070018092118370974\r\n")

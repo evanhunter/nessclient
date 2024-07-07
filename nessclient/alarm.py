@@ -157,9 +157,9 @@ class Alarm:
                 self._on_zone_change(zone_id, state)
 
     def on_state_change(
-        self, f: Callable[[ArmingState, ArmingMode | None], None]
+        self, f: Optional[Callable[[ArmingState, ArmingMode | None], None]]
     ) -> None:
         self._on_state_change = f
 
-    def on_zone_change(self, f: Callable[[int, bool], None]) -> None:
+    def on_zone_change(self, f: Optional[Callable[[int, bool], None]]) -> None:
         self._on_zone_change = f

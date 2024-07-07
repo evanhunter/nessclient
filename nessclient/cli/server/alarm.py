@@ -9,9 +9,6 @@ from .zone import Zone
 
 _LOGGER = logging.getLogger(__name__)
 
-EXIT_DELAY = 10
-ENTRY_DELAY = 10
-
 
 class Alarm:
     """
@@ -24,6 +21,10 @@ class Alarm:
         ARMED = "ARMED"
         ENTRY_DELAY = "ENTRY_DELAY"
         TRIPPED = "TRIPPED"
+        PANIC = "PANIC"
+        DURESS = "DURESS"
+        MEDICAL = "MEDICAL"
+        FIRE = "FIRE"
 
     class ArmingMode(Enum):
         ARMED_AWAY = "ARMED_AWAY"
@@ -32,21 +33,31 @@ class Alarm:
         ARMED_NIGHT = "ARMED_NIGHT"
         ARMED_VACATION = "ARMED_VACATION"
 
+    EXIT_DELAY: int = 10
+    ENTRY_DELAY: int = 10
+    state: ArmingState
+    zones: List[Zone]
+    _alarm_state_changed: Callable[[ArmingState, ArmingState, ArmingMode | None], None]
+    _zone_state_changed: Callable[[int, Zone.State], None]
+    _pending_event: Optional[str]
+    _arming_mode: Optional[ArmingMode]
+    _scheduled_threads: List[threading.Thread] = []
+
     def __init__(
         self,
         state: ArmingState,
         zones: List[Zone],
-        _alarm_state_changed: Callable[
+        alarm_state_changed: Callable[
             [ArmingState, ArmingState, ArmingMode | None], None
         ],
-        _zone_state_changed: Callable[[int, Zone.State], None],
+        zone_state_changed: Callable[[int, Zone.State], None],
     ):
         self.state = state
         self.zones = zones
-        self._arming_mode: Alarm.ArmingMode | None = None
-        self._alarm_state_changed = _alarm_state_changed
-        self._zone_state_changed = _zone_state_changed
-        self._pending_event: Optional[str] = None
+        self._arming_mode = None
+        self._alarm_state_changed = alarm_state_changed
+        self._zone_state_changed = zone_state_changed
+        self._pending_event = None
 
     @staticmethod
     def create(
@@ -59,8 +70,8 @@ class Alarm:
         return Alarm(
             state=Alarm.ArmingState.DISARMED,
             zones=Alarm._generate_zones(num_zones),
-            _alarm_state_changed=alarm_state_changed,
-            _zone_state_changed=zone_state_changed,
+            alarm_state_changed=alarm_state_changed,
+            zone_state_changed=zone_state_changed,
         )
 
     @staticmethod
@@ -72,15 +83,18 @@ class Alarm:
 
     def arm(self, mode: ArmingMode = ArmingMode.ARMED_AWAY) -> None:
         self._update_state(Alarm.ArmingState.EXIT_DELAY, mode)
-        self._schedule(EXIT_DELAY, self._arm_complete)
+        self._schedule(self.EXIT_DELAY, self._arm_complete)
 
     def disarm(self) -> None:
         self._cancel_pending_update()
         self._update_state(Alarm.ArmingState.DISARMED, None)
 
-    def trip(self) -> None:
-        self._update_state_no_mode(Alarm.ArmingState.ENTRY_DELAY)
-        self._schedule(ENTRY_DELAY, self._trip_complete)
+    def trip(self, delay: bool = True) -> None:
+        if delay:
+            self._update_state_no_mode(Alarm.ArmingState.ENTRY_DELAY)
+            self._schedule(self.ENTRY_DELAY, self._trip_complete)
+        else:
+            self._update_state_no_mode(Alarm.ArmingState.TRIPPED)
 
     def update_zone(self, zone_id: int, state: Zone.State) -> None:
         zone = next(z for z in self.zones if z.id == zone_id)
@@ -109,11 +123,14 @@ class Alarm:
         self._pending_event = event
 
         def _run() -> None:
+            _LOGGER.debug(f"Alarm._schedule()._run() sleeping for {delay}")
             time.sleep(delay)
             if event == self._pending_event:
                 fn()
 
-        threading.Thread(target=_run).start()
+        t = threading.Thread(target=_run, name=f"server schedule {fn}")
+        t.start()
+        self._scheduled_threads.append(t)
 
     def _update_state(
         self,
@@ -123,6 +140,7 @@ class Alarm:
         if self._alarm_state_changed is not None:
             self._alarm_state_changed(self.state, state, arming_mode)
 
+        _LOGGER.debug(f"setting arming state to {state} & mode to {arming_mode}")
         self.state = state
         self._arming_mode = arming_mode
 
@@ -133,4 +151,5 @@ class Alarm:
         if self._alarm_state_changed is not None:
             self._alarm_state_changed(self.state, state, self._arming_mode)
 
+        _LOGGER.debug(f"setting arming state to {state}")
         self.state = state

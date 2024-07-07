@@ -4,6 +4,58 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
+
+"""
+Packets are ASCII encoded data.
+    Packet layouts are similar but with important differences:
+
+Input (to Ness) User-Interface Packet:
+* Start:    2 upper case hex characters - must be "83"
+* Address:  1 upper case hex character  - "0" to "F"
+* Length:   2 upper case hex characters - must be "01" to "1E"
+              - Note: it appears that values between 0xA-0xF do not work properly
+* Command:  2 upper case hex characters - must be "60"
+* Data:     N ascii characters - where N = Data Length field
+              - must be from the set: "AHEXFVPDM*#0123456789S"
+* Checksum: 2 upper case hex characters - hex( 0x100
+              - (sum(ordinal of each hex character of previous fields) & 0xff))
+* Finish:   2 characters "\r\n" (Carriage Return, Line Feed - CRLF)
+
+Output (from Ness) Asynchronous Event Data Packet: (see SystemStatusEvent class)
+* Start:    2 lower case hex characters - must be "82", "83", "86", "87"
+* Address:  2 lower case hex characters - "00" to "0F"
+              - only present in start mode "83" or "87"
+* Length:   2 lower case hex characters - must be "03" or "83"
+              - upper bit is alternating "Sequence"
+* Command:  2 lower case hex characters - must be "61"
+* Data:     6 lower case hex characters
+              (double the length specified in the Length field)
+* Timestamp: 12 ascii digit characters
+              - "YYMMDDHHmmSS" - only present in start mode "86" or "87"
+* Checksum: 2 lower case hex characters
+              - sets the sum the integers that each hex pair
+                represent to zero (excluding finish CRLF)
+* Finish:   2 characters "\r\n" (Carriage Return, Line Feed - CRLF)
+
+Output (from Ness) Status Update Packet:
+    (Response to a User-Interface Status Request Packet) (see StatusUpdate class)
+* Start:    2 lower case hex characters - must be "82"
+* Address:  2 lower case hex characters - "00" to "0F"
+              - Note: Address always present despite 0x82 start
+                value that would normally indicate no-address.
+* Length:   2 lower case hex characters - must be "03"
+* Command:  2 lower case hex characters - must be "60"
+* Data:     6 lower case hex characters
+              (double the length specified in the Length field)
+              - Note: Values have different meanings to Event Data Packet
+* Checksum: 2 lower case hex characters
+              - sets the sum the integers that each
+                hex pair represent to zero (excluding finish CRLF)
+* Finish:   2 characters "\r\n" (Carriage Return, Line Feed - CRLF)
+
+"""
+
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -83,7 +135,7 @@ class Packet:
                         "not use delay markers"
                     )
             else:
-                # Input (to Ness) User-Interface Packet:
+                # Input (to Ness) User-Interface (Request) Packet:
                 if len(data) < 1 or len(data) > 30:
                     raise ValueError(
                         "Data length of a User-Interface Packet "
@@ -193,13 +245,20 @@ class Packet:
 
         if self.address is not None:
             if is_user_interface_req(self.start, self.command):
-                data += "{:01x}".format(self.address)
+                # Request address should be upper case
+                # according to D8-D16SerialInterface.exe
+                data += f"{self.address:01X}"
             else:
-                data += "{:02x}".format(self.address)
+                data += f"{self.address:02x}"
 
-        data += "{:02x}".format(self.length_field)
-        data += "{:02x}".format(self.command.value)
+        if is_user_interface_req(self.start, self.command):
+            # Request length & command should be upper case
+            # according to D8-D16SerialInterface.exe
+            data += f"{self.length_field:02X}{self.command.value:02X}"
+        else:
+            data += f"{self.length_field:02x}{self.command.value:02x}"
         data += self.data
+
         if self.timestamp is not None:
             data += self.timestamp.strftime("%y%m%d%H%M%S")
 
@@ -291,7 +350,10 @@ class Packet:
                     f"Packet checksum for input request must be upper case : {_data!r}"
                 )
             if ((-datasum) & 0xFF) != checksum:
-                raise ValueError(f"Packet checksum does not match : {_data!r}")
+                raise ValueError(
+                    f"Packet checksum does not match : {_data!r} : "
+                    f"0x{((-datasum) & 0xFF):02X} != 0x{checksum:02X}"
+                )
 
         else:
             # Output (from Ness) System-Status Packet

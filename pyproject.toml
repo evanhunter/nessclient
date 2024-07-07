@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nessclient"
+version = "3.0.0"
+authors = [{name = "Nick Whyte"}, {name = "Evan Hunter"}]
+maintainers = [{name = "Nick Whyte"}, {name = "Evan Hunter"}]
+description = "Implementation/abstraction of the Ness D8x / D16x Serial Interface ASCII protocol"
+classifiers = [
+        "Intended Audience :: Developers",
+        "Programming Language :: Python",
+        "License :: OSI Approved :: MIT License",
+        ]
+
+dependencies = [
+        "justbackoff",
+        'dataclasses;python_version<"3.7"',
+        "pyserial_asyncio",
+        ]
+
+keywords = ["Ness", "Alarm", "D8x", "D16x", "home-automation"]
+license = {file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.urls]
+homepage = "https://github.com/nickw444/nessclient"
+documentation = "https://nessclient.readthedocs.io/en/latest/"
+
+
+[project.scripts]
+ness-cli = "nessclient.cli.__main__:cli"
+
+
+[project.optional-dependencies]
+cli = [
+    "click",
+]
+test = [
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+]
+all = [
+    "nessclient[cli,test]"
+]
+
+
+[tool.pytest.ini_options]
+markers = [
+    "asyncio",
+]
+# asyncio_mode = "auto"
+
+[tool.coverage.run]
+omit = [
+    ".eggs/*",
+    "setup.py"
+]

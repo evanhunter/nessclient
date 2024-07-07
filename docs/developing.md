@@ -8,7 +8,33 @@ pipenv install --dev
 ## Running tests
 
 ```sh
-pipenv run python setup.py test
+pipenv run pytest
+```
+
+Generate test coverage information:
+```sh
+pipenv run coverage run -m pytest  && coverage html && coverage report --omit=setup.py --omit=.eggs
+```
+
+Run tests with logging output:
+```sh
+pipenv run pytest -s --log-cli-level=debug
+```
+
+Run a specific test with logging output:
+```sh
+pipenv run pytest -s --log-cli-level=debug nessclient_tests/test_client.py
+```
+
+## Command-line Interface
+```sh
+pipenv run python -m nessclient.cli <arguments>
+```
+
+## Examples
+```sh
+pipenv run python -m examples.listening_for_events
+pipenv run python -m examples.sending_commands
 ```
 
 ## Linting

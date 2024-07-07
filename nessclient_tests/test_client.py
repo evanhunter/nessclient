@@ -8,7 +8,7 @@ from nessclient.connection import Connection
 
 
 def get_data(pkt: bytes) -> bytes:
-    return pkt[7:-4]
+    return pkt[7:-5]
 
 
 @pytest.mark.asyncio
@@ -36,7 +36,7 @@ async def test_disarm(connection: AsyncMock, client: Client) -> None:
 async def test_panic(connection: AsyncMock, client: Client) -> None:
     await client.panic("1234")
     assert connection.write.call_count == 1
-    assert get_data(connection.write.call_args[0][0]) == b"*1234#"
+    assert get_data(connection.write.call_args[0][0]) == b"*1234E"
 
 
 @pytest.mark.asyncio

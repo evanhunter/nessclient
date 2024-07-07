@@ -1,8 +1,16 @@
 import asyncio
 
 import click
+import logging
 
 from ..client import Client
+
+_LOGGER = logging.getLogger(__name__)
+
+logging.basicConfig(
+    format="%(asctime)s.%(msecs)03d %(threadName)-25s %(levelname)-8s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 @click.command(help="Send a command")
@@ -11,6 +19,7 @@ from ..client import Client
 @click.option("--serial", type=str, default=None)
 @click.argument("command")
 def send_command(host: str, port: int, serial: str, command: str) -> None:
+    _LOGGER.debug(f"send_command {host} {port} {serial} {command}")
     loop = asyncio.get_event_loop()
     client = Client(host=host, port=port, serial_tty=serial)
 

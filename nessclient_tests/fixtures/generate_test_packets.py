@@ -1,18 +1,11 @@
 import enum
 from datetime import datetime
-from typing import Iterable
 
 from nessclient.event import (
-    ZoneUpdate,
     StatusUpdate,
-    MiscellaneousAlarmsUpdate,
-    ArmingUpdate,
-    OutputsUpdate,
     ViewStateUpdate,
-    AuxiliaryOutputsUpdate,
     PanelVersionUpdate,
 )
-import random
 
 
 def Gemerate_Input_To_Ness_User_Interface_Valid_Packets() -> list[tuple[str, str]]:
@@ -21,7 +14,7 @@ def Gemerate_Input_To_Ness_User_Interface_Valid_Packets() -> list[tuple[str, str
     for address in range(0x0, 0xF + 1):
         for delay_marker in ["", "?"]:
             for length in range(1, 30 + 1):
-                packet = f"83{address:x}{length:02x}60{data[0:length]}"
+                packet = f"83{address:X}{length:02X}60{data[0:length]}"
                 checksum = (256 - sum([ord(x) for x in packet])) % 256
                 packet = f"{packet}{checksum:02X}{delay_marker}\r\n"
                 Input_To_Ness_User_Interface_Valid_Packets.append(
@@ -540,63 +533,3 @@ def Gemerate_Output_From_Ness_Status_Update_Valid_Packets() -> list[tuple[str, s
             )
 
     return Output_From_Ness_Status_Update_Valid_Packets
-
-
-def or_list(vals: list[int]) -> int:
-    output = 0
-    for val in vals:
-        output |= val
-    return output
-
-
-def select_bitfield(bitfield: Iterable[enum.Enum]) -> list[int]:
-    all_elems = [elem.value for elem in bitfield]
-
-    # Begin with the 'no bits' case
-    val_list = [0]
-    for k in range(1, len(all_elems)):
-        # Take a random subset of 16 values with k zones active
-        for _ in range(0, len(all_elems)):
-            while True:
-                elem_subset = random.sample(all_elems, k)
-                val = or_list(elem_subset)
-                if val not in val_list:
-                    val_list.append(val)
-                    break
-    # Add the 'all bits' case
-    val_list.append(or_list(all_elems))
-    return val_list
-
-
-# Run this file stand-alone to generate new lists
-if __name__ == "__main__":
-    print(
-        "\nzones_list:"
-        + str([f"0x{val:04x}" for val in select_bitfield(ZoneUpdate.Zone)])
-    )
-    print(
-        "\nmisc_alarm_list:"
-        + str(
-            [
-                f"0x{val:04x}"
-                for val in select_bitfield(MiscellaneousAlarmsUpdate.AlarmType)
-            ]
-        )
-    )
-    print(
-        "\narming_list:"
-        + str([f"0x{val:04x}" for val in select_bitfield(ArmingUpdate.ArmingStatus)])
-    )
-    print(
-        "\noutput_list:"
-        + str([f"0x{val:04x}" for val in select_bitfield(OutputsUpdate.OutputType)])
-    )
-    print(
-        "\nauxoutput_list:"
-        + str(
-            [
-                f"0x{val:04x}"
-                for val in select_bitfield(AuxiliaryOutputsUpdate.OutputType)
-            ]
-        )
-    )

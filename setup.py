@@ -9,17 +9,12 @@ readme_path = os.path.join(
 )
 long_description = open(readme_path).read()
 
-try:
-    version = get_version()
-except Exception:
-    version = '0.0.0-dev'
+needs_pytest = {"pytest", "test", "ptr"}.intersection(sys.argv)
+pytest_runner = ["pytest-runner"] if needs_pytest else []
 
-needs_pytest = {'pytest', 'test', 'ptr'}.intersection(sys.argv)
-pytest_runner = ['pytest-runner'] if needs_pytest else []
-
-setup(
-    name='nessclient',
-    packages=['nessclient', 'nessclient.cli', 'nessclient.cli.server'],
+dist = setup(
+    name="nessclient",
+    packages=["nessclient", "nessclient.cli", "nessclient.cli.server"],
     author="Nick Whyte",
     author_email="nick@nickwhyte.com",
     description="Implementation/abstraction of the Ness D8x / D16x Serial "
@@ -33,14 +28,7 @@ setup(
         "Programming Language :: Python",
         "License :: OSI Approved :: MIT License",
     ],
-    install_requires=[
-        'justbackoff',
-        'dataclasses;python_version<"3.7"',
-        'pyserial_asyncio'
-    ],
-    extras_require={
-        'cli': ['click']
-    },
+    extras_require={"cli": ["click"]},
     entry_points={
         "console_scripts": ["ness-cli=nessclient.cli.__main__:cli"],
     },
@@ -48,3 +36,8 @@ setup(
     setup_requires=[] + pytest_runner,
     tests_require=["pytest", "pytest-asyncio"],
 )
+
+try:
+    version = dist.get_version()
+except Exception:
+    version = "0.0.0-dev"

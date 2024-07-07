@@ -54,14 +54,9 @@ class AsyncIoConnection(Connection):
             data = await self._reader.readuntil(b"\n")
         except (asyncio.IncompleteReadError, TimeoutError, ConnectionResetError) as e:
             _LOGGER.info(
-                "Got exception: %s. Most likely the other side has " "disconnected!", e
+                f"Got exception: {e}. Most likely the other "
+                f"side has disconnected! - {self._reader.at_eof()}"
             )
-            self._writer = None
-            self._reader = None
-            return None
-
-        if data is None:
-            _LOGGER.info("Empty response received")
             self._writer = None
             self._reader = None
             return None
@@ -76,9 +71,10 @@ class AsyncIoConnection(Connection):
 
             self._writer.write(data)
             await self._writer.drain()
-            _LOGGER.debug("Data was written: %s", data)
+            _LOGGER.debug(f"Data was written: {data!r} {[hex(x) for x in data]}")
 
     async def close(self) -> None:
+        _LOGGER.debug("Closing Connection")
         if self.connected and self._writer is not None:
             self._writer.close()
             if hasattr(self._writer, "wait_closed"):

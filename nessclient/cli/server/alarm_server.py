@@ -1,11 +1,10 @@
 import logging
 import random
 import threading
-import time
-from typing import List, Iterator
+from typing import List, Iterator, Optional
 
 from .alarm import Alarm
-from .server import Server, get_zone_state_event_type
+from .server import Server
 from .zone import Zone
 from ...event import SystemStatusEvent, ArmingUpdate, ZoneUpdate, StatusUpdate
 
@@ -13,9 +12,15 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class AlarmServer:
-    def __init__(self, host: str, port: int):
+    _simulation_end_event: Optional[threading.Event]
+    _simulation_thread: threading.Thread
+    _master_code: str
+
+    def __init__(
+        self, host: str, port: int, num_zones: int = 8, master_code: str = "1234"
+    ):
         self._alarm = Alarm.create(
-            num_zones=8,
+            num_zones=num_zones,
             alarm_state_changed=self._alarm_state_changed,
             zone_state_changed=self._zone_state_changed,
         )
@@ -26,35 +31,68 @@ class AlarmServer:
             raise ValueError("Host must be a valid integer 0-65535")
         self._host = host
         self._port = port
-        self._simulation_running = False
+        self._simulation_end_event = None
+        self._master_code = master_code
 
-    def start(self, interactive: bool = True) -> None:
+    def start(self, interactive: bool = True, with_simulation: bool = True) -> None:
         self._server.start(host=self._host, port=self._port)
-        self._start_simulation()
+        if with_simulation:
+            self._start_simulation()
 
         if interactive:
             while True:
                 command = input("Command: ")
-                if command is None:
-                    continue
+                if not self.interactive_command(command):
+                    _LOGGER.debug("Stopping interactive commands")
+                    break
 
-                command = command.upper().strip()
-                if command == "D":
-                    self._alarm.disarm()
-                elif command == "A" or command == "AA":
-                    self._alarm.arm(Alarm.ArmingMode.ARMED_AWAY)
-                elif command == "AH":
-                    self._alarm.arm(Alarm.ArmingMode.ARMED_HOME)
-                elif command == "AD":
-                    self._alarm.arm(Alarm.ArmingMode.ARMED_DAY)
-                elif command == "AN":
-                    self._alarm.arm(Alarm.ArmingMode.ARMED_NIGHT)
-                elif command == "AV":
-                    self._alarm.arm(Alarm.ArmingMode.ARMED_VACATION)
-                elif command == "T":
-                    self._alarm.trip()
+    def interactive_command(self, command: str) -> bool:
+        print(f"got command {command}")
 
-                print(command)
+        command = command.upper().strip()
+        if command == "D":
+            self._alarm.disarm()
+        elif command == "A" or command == "AA":
+            self._alarm.arm(Alarm.ArmingMode.ARMED_AWAY)
+        elif command == "AH":
+            self._alarm.arm(Alarm.ArmingMode.ARMED_HOME)
+        elif command == "AD":
+            self._alarm.arm(Alarm.ArmingMode.ARMED_DAY)
+        elif command == "AN":
+            self._alarm.arm(Alarm.ArmingMode.ARMED_NIGHT)
+        elif command == "AV":
+            self._alarm.arm(Alarm.ArmingMode.ARMED_VACATION)
+        elif command == "T":
+            self._alarm.trip()
+        elif command == "S":
+            if self._simulation_end_event is None:
+                print("Starting simulation")
+                self._start_simulation()
+            else:
+                print("Stopping simulation")
+                self._stop_simulation()
+            return True
+        elif command == "Q":
+            self.stop()
+            return False
+        else:
+            print("Commands:")
+            print("  A  : Armed Away")
+            print("  AA : Armed Away")
+            print("  AH : Armed Home")
+            print("  AD : Armed Day")
+            print("  AN : Armed Night")
+            print("  AV : Armed Vacation")
+            print("  T  : Trip")
+            print("  S  : Toggle simulation of random unseal activity")
+            print("  Q  : Quit")
+
+        return True
+
+    def stop(self) -> None:
+        _LOGGER.debug("Stopping AlarmServer")
+        self._stop_simulation()
+        self._server.stop()
 
     def _alarm_state_changed(
         self,
@@ -62,20 +100,37 @@ class AlarmServer:
         state: Alarm.ArmingState,
         arming_mode: Alarm.ArmingMode | None,
     ) -> None:
-        if state != Alarm.ArmingState.DISARMED:
+
+        _LOGGER.debug(
+            f"Alarm state change {previous_state} -> {state}  mode {arming_mode}"
+        )
+        if state == Alarm.ArmingState.DISARMED:
+            # Simulated movement in zones only makes sense in disarmed state
+            self._start_simulation()
+        else:
             self._stop_simulation()
 
-        for event_type in get_events_for_state_update(
-            previous_state, state, arming_mode
-        ):
+        event_list = [
+            e for e in get_events_for_state_update(previous_state, state, arming_mode)
+        ]
+        _LOGGER.debug(f"events for state update: {event_list}")
+        for event_type in event_list:
             event = SystemStatusEvent(
                 type=event_type, zone=0x00, area=0x00, timestamp=None, address=0
             )
             self._server.write_event(event)
 
     def _zone_state_changed(self, zone_id: int, state: Zone.State) -> None:
+        type: SystemStatusEvent.EventType
+        if state == Zone.State.SEALED:
+            type = SystemStatusEvent.EventType.SEALED
+        elif state == Zone.State.UNSEALED:
+            type = SystemStatusEvent.EventType.UNSEALED
+        else:
+            raise NotImplementedError()
+
         event = SystemStatusEvent(
-            type=get_zone_state_event_type(state),
+            type=type,
             zone=zone_id,
             area=0,
             timestamp=None,
@@ -84,12 +139,35 @@ class AlarmServer:
         self._server.write_event(event)
 
     def _handle_command(self, command: str) -> None:
+        """
+        Responds to commands from a TCP client
+        Handles Arm, Arm-Home, Disarm, Unsealed-Status & Arming-Status requests
+        """
         _LOGGER.info("Incoming User Command: {}".format(command))
-        if command == "AE" or command == "A1234E":
+        if command == "AE" or command == f"A{self._master_code}E":
             self._alarm.arm()
-        elif command == "HE" or command == "H1234E":
+        elif command == "HE" or command == f"H{self._master_code}E":
             self._alarm.arm(Alarm.ArmingMode.ARMED_HOME)
-        elif command == "1234E":
+        elif command == "0E" or command == f"0{self._master_code}E":
+            self._alarm.arm(Alarm.ArmingMode.ARMED_DAY)
+        elif command == "*E" or command == f"*{self._master_code}E":
+            _LOGGER.info("setting panic")
+            self._alarm._update_state_no_mode(Alarm.ArmingState.PANIC)
+        elif (
+            command[0] in ["5", "6", "8", "9"]
+            and command[1:] == f"{self._master_code}E"
+        ):
+            _LOGGER.info("setting duress")
+            self._alarm._cancel_pending_update()
+            self._alarm._update_state_no_mode(Alarm.ArmingState.DURESS)
+        elif command == "2E":
+            self._alarm._update_state_no_mode(Alarm.ArmingState.MEDICAL)
+        elif command == "3E":
+            self._alarm._update_state_no_mode(Alarm.ArmingState.FIRE)
+        # TODO: No defined way to set Armed-Night mode, Armed-Vacation
+        #       or Armed-Highest in the manual
+        # TODO: add support for AUX on/off commands
+        elif command == f"{self._master_code}E":
             self._alarm.disarm()
         elif command == "S00":
             self._handle_zone_input_unsealed_status_update_request()
@@ -118,19 +196,35 @@ class AlarmServer:
         self._server.write_event(event)
 
     def _simulate_zone_events(self) -> None:
-        while self._simulation_running:
+        """
+        Randomly toggles the sealed/unsealed state of a random zone
+        in a loop with pauses of 1-5 seconds between each
+        """
+        while (
+            self._simulation_end_event is not None
+            and not self._simulation_end_event.wait(random.randint(1, 5))
+        ):
             zone: Zone = random.choice(self._alarm.zones)
             self._alarm.update_zone(zone.id, toggled_state(zone.state))
             _LOGGER.info("Toggled zone: %s", zone)
-            time.sleep(random.randint(1, 5))
+        _LOGGER.info("Simulation ended")
 
     def _stop_simulation(self) -> None:
-        self._simulation_running = False
+        _LOGGER.debug("Stopping activity simulation")
+        if self._simulation_end_event is not None:
+            self._simulation_end_event.set()
+            _LOGGER.info("set event")
+            self._simulation_thread.join()
+            _LOGGER.info("joined")
+            self._simulation_end_event = None
 
     def _start_simulation(self) -> None:
-        if not self._simulation_running:
-            self._simulation_running = True
-            threading.Thread(target=self._simulate_zone_events).start()
+        if self._simulation_end_event is None:
+            self._simulation_end_event = threading.Event()
+            self._simulation_thread = threading.Thread(
+                target=self._simulate_zone_events, name="server unseal simulation"
+            )
+            self._simulation_thread.start()
 
 
 def mode_to_event(mode: Alarm.ArmingMode | None) -> SystemStatusEvent.EventType:
@@ -159,6 +253,7 @@ def get_events_for_state_update(
         yield mode_to_event(arming_mode)
         yield SystemStatusEvent.EventType.EXIT_DELAY_START
 
+    _LOGGER.debug(f"state {state}   {Alarm.ArmingState.TRIPPED}")
     if state == Alarm.ArmingState.TRIPPED:
         yield SystemStatusEvent.EventType.ALARM
 

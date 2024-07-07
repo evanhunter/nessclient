@@ -4,6 +4,8 @@ from .alarm_server import AlarmServer
 
 DEFAULT_PORT = 65432
 
+__all__ = ["AlarmServer", "Alarm"]
+
 
 @click.command(help="Run a dummy server")
 @click.option("--host", default="127.0.0.1")
