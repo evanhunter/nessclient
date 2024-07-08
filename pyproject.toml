@@ -38,13 +38,16 @@ ness-cli = "nessclient.cli.__main__:cli"
 cli = [
     "click",
 ]
+build = [
+    "build",
+]
 test = [
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
 ]
 all = [
-    "nessclient[cli,test]"
+    "nessclient[cli,test,build]"
 ]
 
 
