@@ -49,3 +49,16 @@ pipenv run black  nessclient examples nessclient_tests docs *.py
 ```sh
 pipenv run mypy --strict nessclient examples nessclient_tests docs
 ```
+
+## Generating Docs
+
+```sh
+pipenv run pip install -r docs/requirements.txt
+pipenv run sphinx-build -b singlehtml -E -a docs/ docs/_build/
+```
+
+## Build Distributable
+
+```sh
+pipenv run python setup.py sdist bdist_wheel
+```

@@ -10,6 +10,7 @@
 ## nessclient.event
 
 .. automodule:: nessclient.event
+    :special-members: __init__
     :members:
     :undoc-members:
 

@@ -12,7 +12,7 @@
 
 A python implementation/abstraction of the Ness D8x / D16x Serial Interface ASCII protocol Standard:
 * [V13 Standard](https://github.com/mekatrol/ness-alarm/blob/main/Ness_D8-D16_ASCII_protocol_rev13.pdf) also [here](https://drive.google.com/file/d/1vl8Gs1GY-gKAPSiU8yjCzrgQxm8ybhQh/view)
-*[V5 Standard](https://web.archive.org/web/20201029112844/http://www.nesscorporation.com/Software/Ness_D8-D16_ASCII_protocol.pdf)
+* [V5 Standard](https://web.archive.org/web/20201029112844/http://www.nesscorporation.com/Software/Ness_D8-D16_ASCII_protocol.pdf)
 
 
 
