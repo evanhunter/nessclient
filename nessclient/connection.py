@@ -1,3 +1,6 @@
+"""Provides classes for connection methods between a nessclient and a Ness alarm device
+"""
+
 import asyncio
 import logging
 from abc import ABC, abstractmethod
@@ -35,7 +38,7 @@ class Connection(ABC):
     @abstractmethod
     async def connect(self) -> bool:
         """Establish the conection
-        
+
         :return: True if the connection was successfully established
         """
         raise NotImplementedError()
@@ -44,7 +47,7 @@ class Connection(ABC):
     @abstractmethod
     def connected(self) -> bool:
         """Indicates whether the conection is currently connected
-        
+
         :return: True if the connection is connected
         """
         raise NotImplementedError()
@@ -53,7 +56,7 @@ class Connection(ABC):
 class AsyncIoConnection(Connection):
     """An abstract connection via asyncio with an :py:class:`asyncio.StreamReader`
     and :py:class:`asyncio.StreamReader` with a Ness D8X/D16X server
-    
+
     Note: Subclasses must override:
           1) The constructor to capture the appropriate details of the connection
           2) The connect method
@@ -70,7 +73,7 @@ class AsyncIoConnection(Connection):
     @property
     def connected(self) -> bool:
         """Indicates whether the conection is currently connected
-        
+
         :return: True if the connection is connected
         """
         return self._reader is not None and self._writer is not None
@@ -121,13 +124,16 @@ class AsyncIoConnection(Connection):
 
 
 class IP232Connection(AsyncIoConnection):
-    """A TCP connection to a host & port - e.g. via a IP232 with a Ness D8X/D16X alarm device or simulated-device-server"""
+    """A TCP connection to a host & port - e.g. via a IP232 with
+    a Ness D8X/D16X alarm device or simulated-device-server"""
 
     def __init__(self, host: str, port: int) -> None:
         """Constructs and initialises the IP232Connection object
-        
-        :param host: The TCP host name of the Ness D8X/D16X alarm device or simulated-device-server
-        :param port: The TCP port number of the Ness D8X/D16X alarm device or simulated-device-server
+
+        :param host: The TCP host name of the Ness D8X/D16X alarm
+                     device or simulated-device-server
+        :param port: The TCP port number of the Ness D8X/D16X alarm
+                     device or simulated-device-server
         """
         super().__init__()
 
@@ -136,7 +142,7 @@ class IP232Connection(AsyncIoConnection):
 
     async def connect(self) -> bool:
         """Establish the conection
-        
+
         :return: True if the connection was successfully established
         """
         self._reader, self._writer = await asyncio.open_connection(
@@ -147,11 +153,12 @@ class IP232Connection(AsyncIoConnection):
 
 
 class Serial232Connection(AsyncIoConnection):
-    """A connection via Serial RS232 with a Ness D8X/D16X device or simulated-device-server"""
+    """A connection via Serial RS232 with a Ness D8X/D16X alarm
+    device or simulated-device-server"""
 
     def __init__(self, tty_path: str):
         """Constructs and initialises the Serial232Connection object
-        
+
         :param tty_path: The path to the serial port to be used
         """
         super().__init__()
@@ -162,7 +169,7 @@ class Serial232Connection(AsyncIoConnection):
     @property
     def connected(self) -> bool:
         """Indicates whether the serial conection is currently connected
-        
+
         :return: True if the connection is connected
         """
         return (
@@ -174,7 +181,7 @@ class Serial232Connection(AsyncIoConnection):
     async def connect(self) -> bool:
         """Establish the serial conection
         Note: Ness serial port is always set to 9600 baud and N-8-1
-        
+
         :return: True if the connection was successfully established
         """
         loop = asyncio.get_event_loop()

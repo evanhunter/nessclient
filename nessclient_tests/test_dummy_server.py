@@ -20,6 +20,8 @@ from nessclient.cli.server import AlarmServer
 from nessclient.cli.server.alarm import Alarm
 from nessclient.cli.server.zone import Zone
 from nessclient import Client, ArmingState, ArmingMode, BaseEvent
+from nessclient.client import AllStatus
+from nessclient.event import StatusUpdate
 
 # from abc import ABC, abstractmethod
 
@@ -181,6 +183,27 @@ class ClientServerConnectionTests(unittest.TestCase):
 
         async def testcommands() -> None:
             await pair.client.send_command("S00")
+
+            # Test waiting for status update response
+            event = await pair.client.request_and_wait_status_update(
+                StatusUpdate.RequestID.ZONE_INPUT_UNSEALED
+            )
+            _LOGGER.debug(f"Waited for {event}")
+            assert (
+                event is not None
+                and event.request_id == StatusUpdate.RequestID.ZONE_INPUT_UNSEALED
+            )
+
+            # Test waiting for status update response - this should timeout
+            event = await pair.client.request_and_wait_status_update(
+                StatusUpdate.RequestID.ZONE_CBUS_UNSEALED
+            )
+            assert event is None
+
+            # Test waiting for all status responses
+            all_status: AllStatus = await pair.client.update_all_wait()
+            _LOGGER.debug(f"Waited for {all_status}")
+            assert all_status.Arming is not None
 
             _LOGGER.debug("arming")
             await pair.client.arm_away("1234")

@@ -1,3 +1,7 @@
+"""Allows encoding and decoding of the payload of
+packets received from a Ness alarm device
+"""
+
 import datetime
 import struct
 from enum import Enum
@@ -28,6 +32,9 @@ class BaseEvent(object):
     'Status Update User-Interface Response'
     received from the Ness alarm.
     """
+
+    address: Optional[int]
+    timestamp: Optional[datetime.datetime]
 
     def __init__(self, address: Optional[int], timestamp: Optional[datetime.datetime]):
         """Constructs a BaseEvent object - used by subclass constructors
@@ -116,6 +123,11 @@ class SystemStatusEvent(BaseEvent):
         # Result Events
         OUTPUT_ON = 0x31
         OUTPUT_OFF = 0x32
+
+    type: EventType
+    zone: int
+    area: int
+    sequence: bool
 
     def __init__(
         self,
@@ -233,6 +245,8 @@ class StatusUpdate(BaseEvent):
         PANEL_VERSION = 17
         AUXILIARY_OUTPUTS = 18
 
+    request_id: RequestID
+
     def __init__(
         self,
         request_id: RequestID,
@@ -315,6 +329,8 @@ class ZoneUpdate(StatusUpdate):
         ZONE_14 = 0x0020
         ZONE_15 = 0x0040
         ZONE_16 = 0x0080
+
+    included_zones: List[Zone]
 
     def __init__(
         self,
@@ -407,6 +423,8 @@ class MiscellaneousAlarmsUpdate(StatusUpdate):
         MAINS_FAIL = 0x0008
         CBUS_FAIL = 0x0010
 
+    included_alarms: List[AlarmType]
+
     def __init__(
         self,
         included_alarms: List[AlarmType],
@@ -492,6 +510,8 @@ class ArmingUpdate(StatusUpdate):
         MANUAL_EXCLUDE_MODE = 0x0001
         MEMORY_MODE = 0x0002
         DAY_ZONE_SELECT = 0x0004
+
+    status: List[ArmingStatus]
 
     def __init__(
         self,
@@ -581,6 +601,8 @@ class OutputsUpdate(StatusUpdate):
         PANEL_BATT_FAIL = 0x0040
         TAMPER_XPAND = 0x0080
 
+    outputs: List[OutputType]
+
     def __init__(
         self,
         outputs: List["OutputsUpdate.OutputType"],
@@ -661,6 +683,8 @@ class ViewStateUpdate(StatusUpdate):
         USER_PROGRAM = 0x9000
         INSTALLER_PROGRAM = 0x8000
 
+    state: State
+
     def __init__(
         self,
         state: "ViewStateUpdate.State",
@@ -732,6 +756,10 @@ class PanelVersionUpdate(StatusUpdate):
 
         D16X = 0x00
         D16X_3G = 0x04
+
+    model: Model
+    major_version: int
+    minor_version: int
 
     def __init__(
         self,
@@ -836,6 +864,8 @@ class AuxiliaryOutputsUpdate(StatusUpdate):
         AUX_6 = 0x0020
         AUX_7 = 0x0040
         AUX_8 = 0x0080
+
+    outputs: List[OutputType]
 
     def __init__(
         self,
