@@ -63,13 +63,26 @@ class Alarm:
             and event.request_id == ZoneUpdate.RequestID.ZONE_INPUT_UNSEALED
         ):
             self._handle_zone_input_update(event)
+        elif (
+            isinstance(event, ZoneUpdate)
+            and event.request_id == ZoneUpdate.RequestID.ZONE_IN_ALARM
+        ):
+            self._handle_zone_alarm_update(event)
         elif isinstance(event, SystemStatusEvent):
             self._handle_system_status_event(event)
 
+
+
     def _handle_arming_update(self, update: ArmingUpdate) -> None:
-        if update.status == [ArmingUpdate.ArmingStatus.AREA_1_ARMED]:
+        # Note: ArmingUpdate cannot indicate whether the alarm is currently triggered
+        #       This can only be obtained from the ZONE_IN_ALARM ZoneUpdate StatusUpdate or
+        #       from the ALARM System-Status Event
+        if self.arming_state == ArmingState.TRIGGERED:
+            # Skip update, since we cannot determine from this message whether the alarm is still triggered
+            pass
+        elif update.status == [ArmingUpdate.ArmingStatus.AREA_1_ARMED]:
             return self._update_arming_state(ArmingState.EXIT_DELAY)
-        if (
+        elif (
             ArmingUpdate.ArmingStatus.AREA_1_ARMED in update.status
             and ArmingUpdate.ArmingStatus.AREA_1_FULLY_ARMED in update.status
         ):
@@ -104,6 +117,20 @@ class Alarm:
             else:
                 self._update_zone(zone_id, False)
 
+    def _handle_zone_alarm_update(self, update: ZoneUpdate) -> None:
+        for i, zone in enumerate(self.zones):
+            zone_id = i + 1
+            name = "ZONE_{}".format(zone_id)
+            if ZoneUpdate.Zone[name] in update.included_zones:
+                self._update_arming_state(ArmingState.TRIGGERED)
+                return
+        
+        # No zones are in alarm - if the current state is triggered, set 
+        # it back to unknown so a subsequent ArmingUpdate can set it correctly
+        if self.arming_state == ArmingState.TRIGGERED:
+            self._update_arming_state(ArmingState.UNKNOWN)
+
+        
     def _handle_system_status_event(self, event: SystemStatusEvent) -> None:
         """
         DISARMED -> ARMED_AWAY -> EXIT_DELAY_START -> EXIT_DELAY_END

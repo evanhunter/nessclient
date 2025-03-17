@@ -180,6 +180,7 @@ class AlarmServer:
             address=0x00,
             timestamp=None,
         )
+        _LOGGER.debug(f"Received arming-status request - replying with {event}")
         self._server.write_event(event)
 
     def _handle_zone_input_unsealed_status_update_request(self) -> None:
@@ -253,7 +254,7 @@ def get_events_for_state_update(
         yield mode_to_event(arming_mode)
         yield SystemStatusEvent.EventType.EXIT_DELAY_START
 
-    _LOGGER.debug(f"state {state}   {Alarm.ArmingState.TRIPPED}")
+    _LOGGER.debug(f"get_events_for_state_update - state: {state}   arming_mode: {arming_mode}")
     if state == Alarm.ArmingState.TRIPPED:
         yield SystemStatusEvent.EventType.ALARM
 

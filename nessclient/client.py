@@ -163,6 +163,8 @@ class Client:
         await asyncio.gather(
             # List unsealed Zones
             self.send_command("S00"),
+            # List Zones currently Alarming
+            self.send_command("S05"),
             # Arming status update
             self.send_command("S14"),
             # List unsealed Zones
@@ -187,6 +189,72 @@ class Client:
             # self.send_command("S18"),
             # Arming status update
             # self.send_command("S14"),
+        )
+
+
+    async def update_wait(self) -> (list[bool], ):
+        """Force update of ZoneInputUnsealed status and Arming Status"""
+        _LOGGER.debug("Requesting state update from server (S00, S14)")
+        (
+            zone_input_unsealed,
+            arming,
+        ) = await asyncio.gather(
+            # List unsealed Zones
+            self.request_and_wait_status_update(
+                StatusUpdate.RequestID.ZONE_INPUT_UNSEALED
+            ),
+            self.request_and_wait_status_update(StatusUpdate.RequestID.ARMING),
+        )
+        zones: list[ZoneStatus] = []
+        for z in ZoneUpdate.Zone:
+            zones.append(
+                ZoneStatus(
+                    InputUnsealed=zone_input_unsealed is not None
+                    and (z in cast(ZoneUpdate, zone_input_unsealed).included_zones),
+                    RadioUnsealed=zone_radio_unsealed is not None
+                    and (z in cast(ZoneUpdate, zone_radio_unsealed).included_zones),
+                    CbusUnsealed=zone_cbus_unsealed is not None
+                    and (z in cast(ZoneUpdate, zone_cbus_unsealed).included_zones),
+                    InDelay=zone_radio_unsealed is not None
+                    and (z in cast(ZoneUpdate, zone_in_delay).included_zones),
+                    InDoubleTrigger=zone_in_double_trigger is not None
+                    and (z in cast(ZoneUpdate, zone_in_double_trigger).included_zones),
+                    InAlarm=zone_in_alarm is not None
+                    and (z in cast(ZoneUpdate, zone_in_alarm).included_zones),
+                    Excluded=zone_excluded is not None
+                    and (z in cast(ZoneUpdate, zone_excluded).included_zones),
+                    AutoExcluded=zone_auto_excluded is not None
+                    and (z in cast(ZoneUpdate, zone_auto_excluded).included_zones),
+                    SupervisionFailPending=zone_supervision_fail_pending is not None
+                    and (
+                        z
+                        in cast(
+                            ZoneUpdate, zone_supervision_fail_pending
+                        ).included_zones
+                    ),
+                    SupervsionFail=zone_supervision_fail is not None
+                    and (z in cast(ZoneUpdate, zone_supervision_fail).included_zones),
+                    DoorsOpen=zone_doors_open is not None
+                    and (z in cast(ZoneUpdate, zone_doors_open).included_zones),
+                    DetectorLowBattery=zone_detector_low_battery is not None
+                    and (
+                        z in cast(ZoneUpdate, zone_detector_low_battery).included_zones
+                    ),
+                    DetectorTamper=zone_detector_tamper is not None
+                    and (z in cast(ZoneUpdate, zone_detector_tamper).included_zones),
+                )
+            )
+
+        return AllStatus(
+            Zones=zones,
+            MiscellaneousAlarms=cast(
+                Optional[MiscellaneousAlarmsUpdate], miscellaneous_alarms
+            ),
+            Arming=cast(Optional[ArmingUpdate], arming),
+            Outputs=cast(Optional[OutputsUpdate], outputs),
+            ViewState=cast(Optional[ViewStateUpdate], view_state),
+            PanelVersion=cast(Optional[PanelVersionUpdate], panel_version),
+            AuxiliaryOutputs=cast(Optional[AuxiliaryOutputsUpdate], auxiliary_outputs),
         )
 
     async def update_all_wait(self) -> AllStatus:
@@ -443,7 +511,6 @@ class Client:
                 _LOGGER.debug("_recv_loop() - reading")
                 data = await self._connection.read()
                 _LOGGER.debug(f"_recv_loop() - read got {data!r}")
-                print(f"_recv_loop() - read got {data!r}")
                 if data is None:
                     self.disconnection_count += 1
                     _LOGGER.debug("Received None data from connection.read()")
