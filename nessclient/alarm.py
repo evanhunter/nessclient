@@ -1,9 +1,12 @@
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Callable, List
 
 from .event import BaseEvent, ZoneUpdate, ArmingUpdate, SystemStatusEvent
 
+
+_LOGGER = logging.getLogger(__name__)
 
 class ArmingState(Enum):
     UNKNOWN = "UNKNOWN"
@@ -77,6 +80,8 @@ class Alarm:
         # Note: ArmingUpdate cannot indicate whether the alarm is currently triggered
         #       This can only be obtained from the ZONE_IN_ALARM ZoneUpdate StatusUpdate or
         #       from the ALARM System-Status Event
+        
+        _LOGGER.debug(f"Handling ArmingUpdate - current state: {self.arming_state}  update: {update}")
         if self.arming_state == ArmingState.TRIGGERED:
             # Skip update, since we cannot determine from this message whether the alarm is still triggered
             pass
@@ -118,6 +123,7 @@ class Alarm:
                 self._update_zone(zone_id, False)
 
     def _handle_zone_alarm_update(self, update: ZoneUpdate) -> None:
+        _LOGGER.debug(f"Handling Zone Alarm ZoneUpdate - update: {update}")
         for i, zone in enumerate(self.zones):
             zone_id = i + 1
             name = "ZONE_{}".format(zone_id)
@@ -141,6 +147,7 @@ class Alarm:
 
         TODO(NW): Check ALARM_RESTORE state transition to move back into ARMED_AWAY state
         """
+        _LOGGER.debug(f"Handling ArmingUpdate - current state: {self.arming_state}  event: {event}")
         if event.type == SystemStatusEvent.EventType.UNSEALED:
             return self._update_zone(event.zone, True)
         elif event.type == SystemStatusEvent.EventType.SEALED:

@@ -114,6 +114,7 @@ class Alarm:
                 self.zones[zone - 1].in_delay = False
                 self.zones[zone - 1].in_alarm = True
                 self._update_state_no_mode(Alarm.ArmingState.TRIPPED)
+                _LOGGER.debug(f"Tripped {self}")
 
             self._schedule(self.ENTRY_DELAY, _trip_complete)
         else:
