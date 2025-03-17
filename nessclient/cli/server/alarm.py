@@ -78,23 +78,48 @@ class Alarm:
     def _generate_zones(num_zones: int) -> List[Zone]:
         rv = []
         for i in range(num_zones):
-            rv.append(Zone(id=i + 1, state=Zone.State.SEALED))
+            rv.append(Zone(id=i + 1, state=Zone.State.SEALED, in_alarm=False, in_delay=False))
         return rv
 
     def arm(self, mode: ArmingMode = ArmingMode.ARMED_AWAY) -> None:
         self._update_state(Alarm.ArmingState.EXIT_DELAY, mode)
-        self._schedule(self.EXIT_DELAY, self._arm_complete)
+        for z in self.zones:
+            z.in_alarm = False
+            z.in_delay = True
+
+        def _arm_complete() -> None:
+            _LOGGER.debug("Arm completed")
+            for z in self.zones:
+                z.in_alarm = False
+                z.in_delay = False
+            self._update_state_no_mode(Alarm.ArmingState.ARMED)
+
+        self._schedule(self.EXIT_DELAY, _arm_complete)
 
     def disarm(self) -> None:
         self._cancel_pending_update()
+        
+        for z in self.zones:
+            z.in_alarm = False
+            z.in_delay = False
         self._update_state(Alarm.ArmingState.DISARMED, None)
 
-    def trip(self, delay: bool = True) -> None:
+    def trip(self, delay: bool = True, zone: int = 1) -> None:
         if delay:
             self._update_state_no_mode(Alarm.ArmingState.ENTRY_DELAY)
-            self._schedule(self.ENTRY_DELAY, self._trip_complete)
+            self.zones[zone - 1].in_delay = True
+
+            def _trip_complete() -> None:
+                _LOGGER.debug("Trip completed")
+                self.zones[zone - 1].in_delay = False
+                self.zones[zone - 1].in_alarm = True
+                self._update_state_no_mode(Alarm.ArmingState.TRIPPED)
+
+            self._schedule(self.ENTRY_DELAY, _trip_complete)
         else:
             self._update_state_no_mode(Alarm.ArmingState.TRIPPED)
+            self.zones[zone - 1].in_delay = False
+            self.zones[zone - 1].in_alarm = True
 
     def update_zone(self, zone_id: int, state: Zone.State) -> None:
         zone = next(z for z in self.zones if z.id == zone_id)
@@ -105,13 +130,6 @@ class Alarm:
         if self.state == Alarm.ArmingState.ARMED:
             self.trip()
 
-    def _arm_complete(self) -> None:
-        _LOGGER.debug("Arm completed")
-        self._update_state_no_mode(Alarm.ArmingState.ARMED)
-
-    def _trip_complete(self) -> None:
-        _LOGGER.debug("Trip completed")
-        self._update_state_no_mode(Alarm.ArmingState.TRIPPED)
 
     def _cancel_pending_update(self) -> None:
         if self._pending_event is not None:

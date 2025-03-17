@@ -171,6 +171,10 @@ class AlarmServer:
             self._alarm.disarm()
         elif command == "S00":
             self._handle_zone_input_unsealed_status_update_request()
+        elif command == "S03":
+            self._handle_zone_in_delay_status_update_request()
+        elif command == "S05":
+            self._handle_zone_in_alarm_status_update_request()
         elif command == "S14":
             self._handle_arming_status_update_request()
 
@@ -190,6 +194,32 @@ class AlarmServer:
                 get_zone_for_id(z.id)
                 for z in self._alarm.zones
                 if z.state == Zone.State.UNSEALED
+            ],
+            address=0x00,
+            timestamp=None,
+        )
+        self._server.write_event(event)
+
+    def _handle_zone_in_delay_status_update_request(self) -> None:
+        event = ZoneUpdate(
+            request_id=StatusUpdate.RequestID.ZONE_IN_DELAY,
+            included_zones=[
+                get_zone_for_id(z.id)
+                for z in self._alarm.zones
+                if z.in_delay
+            ],
+            address=0x00,
+            timestamp=None,
+        )
+        self._server.write_event(event)
+
+    def _handle_zone_in_alarm_status_update_request(self) -> None:
+        event = ZoneUpdate(
+            request_id=StatusUpdate.RequestID.ZONE_IN_ALARM,
+            included_zones=[
+                get_zone_for_id(z.id)
+                for z in self._alarm.zones
+                if z.in_alarm
             ],
             address=0x00,
             timestamp=None,
