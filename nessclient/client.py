@@ -541,7 +541,10 @@ class Client:
                         f = self._requests_awaiting_response[event.request_id]
                         if f is not None:
                             _LOGGER.debug(f"Waiter for {event} :  {f}")
-                            f.set_result(event)
+                            try:
+                                f.set_result(event)
+                            except asyncio.exceptions.InvalidStateError as e:
+                                _LOGGER.info(f"Waiter already set for {f} : {e}")
                             self._requests_awaiting_response[event.request_id] = None
                         else:
                             _LOGGER.debug(
