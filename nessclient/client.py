@@ -131,22 +131,22 @@ class Client:
         command = "H{}E".format(code if code else "")
         return await self.send_command(command)
 
-    async def disarm(self, code: str) -> None:
-        command = "{}E".format(code)
+    async def disarm(self, code: Optional[str]) -> None:
+        command = "{}E".format(code if code else "")
         return await self.send_command(command)
 
-    async def panic(self, code: str) -> None:
-        command = "*{}E".format(code)
+    async def panic(self, code: Optional[str]) -> None:
+        command = "*{}E".format(code if code else "")
         return await self.send_command(command)
 
-    async def enter_user_program_mode(self, master_code: str = "123") -> None:
-        command = f"M{master_code}E"
+    async def enter_user_program_mode(self, master_code: Optional[str] = "123") -> None:
+        command = "M{}E".format(master_code if master_code else "")
         return await self.send_command(command)
 
     async def enter_installer_program_mode(
-        self, installer_code: str = "000000"
+        self, installer_code: Optional[str] = "000000"
     ) -> None:
-        command = f"M{installer_code}E"
+        command = "M{}E".format(installer_code if installer_code else "")
         return await self.send_command(command)
 
     async def exit_program_mode(self) -> None:
