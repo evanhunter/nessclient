@@ -77,6 +77,7 @@ class AlarmServer:
             return False
         else:
             print("Commands:")
+            print("  D  : Disarm")
             print("  A  : Armed Away")
             print("  AA : Armed Away")
             print("  AH : Armed Home")
