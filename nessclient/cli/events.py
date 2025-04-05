@@ -1,11 +1,12 @@
 import asyncio
+from typing import Optional
+
 import click
 
+from ..alarm import Alarm, ArmingMode, ArmingState
 from ..client import Client
-from ..alarm import ArmingState, ArmingMode
 from ..event import BaseEvent
 from .server import DEFAULT_PORT
-from typing import Optional
 
 
 @click.command(help="Listen for emitted alarm events")
@@ -15,9 +16,9 @@ from typing import Optional
 @click.option("--update-interval", type=int, default=60)
 @click.option("--infer-arming-state/--no-infer-arming-state")
 def events(
-    host: Optional[str],
-    port: Optional[int],
-    serial: Optional[str],
+    host: str | None,
+    port: int | None,
+    serial: str | None,
     update_interval: int,
     infer_arming_state: bool,
 ) -> None:
@@ -34,7 +35,7 @@ def events(
     )
 
     @client.on_zone_change
-    def on_zone_change(zone: int, triggered: bool) -> None:
+    def on_zone_change(zone: int, triggered: Alarm.Zone.ZoneSealedState) -> None:
         print(f"Zone {zone} changed to {triggered}")
 
     @client.on_state_change

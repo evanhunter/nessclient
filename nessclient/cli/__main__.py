@@ -1,7 +1,7 @@
 import logging
+from importlib import metadata
 
 import click
-from importlib import metadata
 
 from .events import events
 from .send_command import send_command

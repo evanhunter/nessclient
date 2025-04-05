@@ -1,15 +1,11 @@
-import datetime
-import logging
-from dataclasses import dataclass
-from enum import Enum
-from typing import Optional
+r"""
+Encode / Decode NESS Serial ASCII protocol packets.
 
-
-"""
 Packets are ASCII encoded data.
     Packet layouts are similar but with important differences:
 
-Input (to Ness) User-Interface Packet:
+Input (to Ness) User-Interface Packet
+Either a Keypad String or Status Request:
 * Start:    2 upper case hex characters - must be "83"
 * Address:  1 upper case hex character  - "0" to "F"
 * Length:   2 upper case hex characters - must be "01" to "1E"
@@ -55,48 +51,71 @@ Output (from Ness) Status Update Packet:
 
 """
 
+import datetime
+import logging
+from dataclasses import dataclass
+from enum import Enum
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class CommandType(Enum):
+    """Ness Serial ASCII Protocol Command byte values."""
+
     SYSTEM_STATUS = 0x61
     USER_INTERFACE = 0x60
 
 
 def is_hex(s: str) -> bool:
-    for c in s:
-        if c not in "0123456789ABCDEFabcdef":
-            return False
-    return True
+    """Return True if the supplied string is entirely valid hexidecimal characters."""
+    return all(c in "0123456789ABCDEFabcdef" for c in s)
 
 
 def is_valid_ui_data_char(s: str) -> bool:
-    for c in s:
-        if c not in "AHEXFVPDM*#0123456789S":
-            return False
-    return True
+    """Return True if the supplied string is valid NESS UI data characters."""
+    return all(c in "AHEXFVPDM*#0123456789S" for c in s)
 
 
 @dataclass
 class Packet:
-    address: Optional[int]
+    address: int | None
     seq: int
     command: CommandType
     data: str
-    timestamp: Optional[datetime.datetime]
+    timestamp: datetime.datetime | None
     has_delay_marker: bool
+
+    USER_INTERFACE_RESPONSE_DATA_SIZE = 6  # 6 hex characters
+    USER_INTERFACE_REQUEST_DATA_SIZE_MIN = 1
+    USER_INTERFACE_REQUEST_DATA_SIZE_MAX = 30
+    SYSTEM_STATUS_DATA_SIZE = 6  # 6 hex characters
+    ADDRESS_MIN = 0x0
+    ADDRESS_MAX = 0xF
+
+    START_BYTE_ADDRESS_INCLUDED = 0x01
+    START_BYTE_BASIC_HEADER = 0x02
+    START_BYTE_TIMESTAMP_INCLUDED = 0x04
+    START_BYTE_ASCII_FORMAT = 0x80
+
+    USER_INTERFACE_REQUEST_FIXED_START_BYTE = 0x83
+    USER_INTERFACE_RESPONSE_FIXED_START_BYTE = 0x82
+
+    USER_INTERFACE_RESPONSE_ENCODED_LENGTH = 16
+
+    # Start:2, Length:1, Command:2, Checksum:2, Finish:2
+    MINIMUM_PACKET_LENGTH = 9
 
     # Whether or not this packet is a USER_INTERFACE response
     is_user_interface_resp: bool = False
 
     def __init__(
         self,
+        *,
         command: CommandType,
         data: str,
-        address: Optional[int] = None,
+        address: int | None = None,
         seq: int = 0,
-        timestamp: Optional[datetime.datetime] = None,
+        timestamp: datetime.datetime | None = None,
         is_user_interface_resp: bool = False,
         has_delay_marker: bool = False,
     ) -> None:
@@ -104,85 +123,105 @@ class Packet:
             if is_user_interface_resp:
                 # Output (from Ness) Status Update Packet:
                 # (Response to a User-Interface Status Request Packet)
-                if len(data) != 6:
-                    raise ValueError(
+                if len(data) != Packet.USER_INTERFACE_RESPONSE_DATA_SIZE:
+                    msg = (
                         "Data length of a User-Interface status "
                         f"update response must be 6 - got {len(data)}"
                     )
+                    raise ValueError(msg)
                 if not is_hex(data):
-                    raise ValueError(
+                    msg = (
                         "Data of a User-Interface status update "
                         f"response must be hex - got {data}"
                     )
+                    raise ValueError(msg)
                 if address is None:
-                    raise ValueError(
+                    msg = (
                         "User-Interface status update responses "
                         f"must have an address - got {address}"
                     )
+                    raise ValueError(msg)
                 if timestamp is not None:
-                    raise ValueError(
+                    msg = (
                         "User-Interface status update responses "
                         f"must not have a timestamp - got {timestamp}"
                     )
+                    raise ValueError(msg)
                 if seq != 0:
-                    raise ValueError(
+                    msg = (
                         "User-Interface status update responses do "
                         f"not use sequence - it must be zero - got {seq}"
                     )
+                    raise ValueError(msg)
                 if has_delay_marker:
-                    raise ValueError(
+                    msg = (
                         "User-Interface status update responses do "
                         "not use delay markers"
                     )
+                    raise ValueError(msg)
             else:
                 # Input (to Ness) User-Interface (Request) Packet:
-                if len(data) < 1 or len(data) > 30:
-                    raise ValueError(
-                        "Data length of a User-Interface Packet "
-                        f"must be in the range 1 - 30 - got {len(data)}"
+                if (
+                    len(data) < Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MIN
+                    or len(data) > Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MAX
+                ):
+                    msg = (
+                        "Data length of a User-Interface Packet must be in the range "
+                        f"{Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MIN}"
+                        f" - {Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MAX}"
+                        f" - got {len(data)}"
                     )
+                    raise ValueError(msg)
                 if not is_valid_ui_data_char(data):
-                    raise ValueError(
+                    msg = (
                         "Data characters of a User-Interface Packet must "
                         f"be one of 'AHEXFVPDM*#01234567890S' - got {data}"
                     )
+                    raise ValueError(msg)
                 if address is None:
-                    raise ValueError(
-                        "User-Interface Packet must have an address " f"- got {address}"
-                    )
+                    msg = f"User-Interface Packet must have an address - got {address}"
+                    raise ValueError(msg)
                 if timestamp is not None:
-                    raise ValueError(
+                    msg = (
                         "User-Interface Packet must not have a timestamp "
                         f"- got {timestamp}"
                     )
+                    raise ValueError(msg)
                 if seq != 0:
-                    raise ValueError(
+                    msg = (
                         "User-Interface Packet do not use sequence "
                         f"- it must be zero - got {seq}"
                     )
+                    raise ValueError(msg)
         elif command == CommandType.SYSTEM_STATUS:
             # Output (from Ness) Event Data Packet: (see SystemStatusEvent class)
-            if len(data) != 6:
-                raise ValueError(
+            if len(data) != Packet.SYSTEM_STATUS_DATA_SIZE:
+                msg = (
                     "Data length of a System Status Event Data Packet "
-                    f"must be 6 - got {len(data)}"
+                    f"must be {Packet.SYSTEM_STATUS_DATA_SIZE} - got {len(data)}"
                 )
+                raise ValueError(msg)
             if not is_hex(data):
-                raise ValueError(
+                msg = (
                     "Data of a System Status Event Data Packet must "
                     f"be hex - got {data}"
                 )
+                raise ValueError(msg)
             if has_delay_marker:
-                raise ValueError(
-                    "System Status Event Data Packet must " "not use delay markers"
-                )
+                msg = "System Status Event Data Packet must not use delay markers"
+                raise ValueError(msg)
         else:
-            raise ValueError(f"Unknown command {command}")
+            msg = f"Unknown command {command}"
+            raise ValueError(msg)
 
-        if address is not None and (address < 0 or address > 0xF):
-            raise ValueError(
-                f"Address must be in the range 0x0 - 0xf if provided - got {address}"
+        if address is not None and (
+            address < Packet.ADDRESS_MIN or address > Packet.ADDRESS_MAX
+        ):
+            msg = (
+                f"Address must be in the range {Packet.ADDRESS_MIN}"
+                f"- {Packet.ADDRESS_MAX} if provided - got {address}"
             )
+            raise ValueError(msg)
 
         # Validated
         self.command = command
@@ -195,13 +234,23 @@ class Packet:
 
     @property
     def start(self) -> int:
-        rv = 0x02 | 0x80
-        if self.address is not None and not self.is_user_interface_resp:
-            rv |= 0x01
-        if self.timestamp is not None:
-            rv |= 0x04
+        """
+        Return START-byte for this packet.
 
-        return rv
+        The start byte is:
+            * Input-to-Ness UI Request - Always 0x83
+            * Output-from-Ness UI Response - Always 0x82
+            * Output-from-Ness Asynchronous Event Data -
+                        0x82, 0x83, 0x86, 0x87 according to table in specification
+        """
+        # Basic-Header and ASCII-Format are always present
+        start_byte = Packet.START_BYTE_BASIC_HEADER | Packet.START_BYTE_ASCII_FORMAT
+        if self.address is not None and not self.is_user_interface_resp:
+            start_byte |= Packet.START_BYTE_ADDRESS_INCLUDED
+        if self.timestamp is not None:
+            start_byte |= Packet.START_BYTE_TIMESTAMP_INCLUDED
+
+        return start_byte
 
     @property
     def length_field(self) -> int:
@@ -209,24 +258,25 @@ class Packet:
 
     @property
     def length(self) -> int:
-        if is_user_interface_req(self.start, self.command):
+        if _is_user_interface_req(self.start, self.command):
             return len(self.data)
-        else:
-            return int(len(self.data) / 2)
+
+        return int(len(self.data) / 2)
 
     @property
     def checksum(self) -> int:
-        bytes = self.encode(with_checksum=False).strip()
+        """Return checksum value for this packet."""
+        data_bytes = self.encode(with_checksum=False).strip()
 
         # Checksum is calculated differently depending on the packet type.
-        if is_user_interface_req(self.start, self.command):
+        if _is_user_interface_req(self.start, self.command):
             # Input (to Ness) User-Interface Packets sum the
             # ordinal of each hex character, excluding the checksum and CRLF
             # e.g. '8300360S00E9\r\n'
             #      Sum = 0x38 + 0x33 + 0x30 + 0x30 + 0x33 +
             #            0x36 + 0x30 + 0x53 + 0x30 + 0x30 = 0x217
             #      Checksum = (-Sum) & 0xff = 0xE9
-            total = sum([ord(x) for x in bytes])
+            total = sum([ord(x) for x in data_bytes])
         else:
             # Output (from Ness) System-Status Packets sum the
             # integers that each hex pair represent, excluding the checksum and CRLF
@@ -234,24 +284,25 @@ class Packet:
             #      Sum = 0x82 + 0x00 + 0x03 + 0x60 + 0x00 + 0x00 + 0x00 = 0xE5
             #      Checksum = (-Sum) & 0xff = 0x1b
             total = 0
-            for pos in range(0, len(bytes), 2):
-                total += int(bytes[pos : pos + 2], 16)
+            for pos in range(0, len(data_bytes), 2):
+                total += int(data_bytes[pos : pos + 2], 16)
 
         return (256 - total) % 256
 
-    def encode(self, with_checksum: bool = True) -> str:
+    def encode(self, *, with_checksum: bool = True) -> str:
+        """Encode this packet to a Ness Serial ASCII Protocol string."""
         data = ""
-        data += "{:02x}".format(self.start)
+        data += f"{self.start:02x}"
 
         if self.address is not None:
-            if is_user_interface_req(self.start, self.command):
+            if _is_user_interface_req(self.start, self.command):
                 # Request address should be upper case
                 # according to D8-D16SerialInterface.exe
                 data += f"{self.address:01X}"
             else:
                 data += f"{self.address:02x}"
 
-        if is_user_interface_req(self.start, self.command):
+        if _is_user_interface_req(self.start, self.command):
             # Request length & command should be upper case
             # according to D8-D16SerialInterface.exe
             data += f"{self.length_field:02X}{self.command.value:02X}"
@@ -263,8 +314,8 @@ class Packet:
             data += self.timestamp.strftime("%y%m%d%H%M%S")
 
         if with_checksum:
-            checksum_str = "{:02x}".format(self.checksum)
-            if is_user_interface_req(self.start, self.command):
+            checksum_str = "{self.checksum:02x}"
+            if _is_user_interface_req(self.start, self.command):
                 # NOTE: Checksum for UI Input Request packets MUST be upper case
                 #       Otherwise packets will be ignored by NESS
                 data += checksum_str.upper()
@@ -278,7 +329,9 @@ class Packet:
     @classmethod
     def decode(cls, _data: str) -> "Packet":
         """
-        Packets are ASCII encoded data. Packet layout is as follows:
+        Decode from a Ness Serial ASCII Protocol string into a Packet.
+
+        Packets are ASCII encoded data. Packet layout is as follows.
 
         +---------------------------------------------------------------------------+
         | start | address | length | command | data | timestamp | checksum | finish |
@@ -293,24 +346,25 @@ class Packet:
             YY MM DD HH MM SS
 
         Checksum:
-            Calculated by...?
+            TODO: Calculated by...?
 
         Since data is ASCII encoded, each byte uses 2 ASCII character to be
         represented. However, we cannot simply do a hex decode on the entire
         message, since the timestamp and data fields are represented using a
         non-hex representation and therefore must be manually decoded.
         """
-
-        # Check minimum data size (Start:2, Length:1, Command:2, Checksum:2, Finish:2)
-        if len(_data) < 9:
-            raise ValueError(f"Packet data too short : {_data!r}")
+        # Check minimum data size
+        if len(_data) < Packet.MINIMUM_PACKET_LENGTH:
+            msg = f"Packet data too short : {_data!r}"
+            raise ValueError(msg)
 
         # Check and remove the finish marker
         if _data[-2:] != "\r\n":
-            raise ValueError(
+            msg = (
                 f"Packet data {_data!r} did not "
                 f"end with CRLF newline - ignoring  {_data[-2:]}"
             )
+            raise ValueError(msg)
         _data = _data[:-2]
 
         has_delay_marker = False
@@ -341,19 +395,20 @@ class Packet:
             datasum = sum([ord(x) for x in _data[:-2]])
             try:
                 checksum = int(_data[-2:], 16)
-            except ValueError:
-                raise ValueError(
-                    f"Invalid non-hex character in checksum byte: {_data!r}"
-                )
+            except ValueError as e:
+                msg = f"Invalid non-hex character in checksum byte: {_data!r}"
+                raise ValueError(msg) from e
             if f"{checksum:02X}" != _data[-2:]:
-                raise ValueError(
+                msg = (
                     f"Packet checksum for input request must be upper case : {_data!r}"
                 )
+                raise ValueError(msg)
             if ((-datasum) & 0xFF) != checksum:
-                raise ValueError(
+                msg = (
                     f"Packet checksum does not match : {_data!r} : "
                     f"0x{((-datasum) & 0xFF):02X} != 0x{checksum:02X}"
                 )
+                raise ValueError(msg)
 
         else:
             # Output (from Ness) System-Status Packet
@@ -370,13 +425,13 @@ class Packet:
             for pos in range(0, len(_data), 2):
                 try:
                     datasum += int(_data[pos : pos + 2], 16)
-                except ValueError:
-                    raise ValueError(f"Invalid non-hex character in data: {_data!r}")
+                except ValueError as e:
+                    msg = f"Invalid non-hex character in data: {_data!r}"
+                    raise ValueError(msg) from e
 
             if (datasum & 0xFF) != 0:
-                raise ValueError(
-                    f"Packet checksum does not match : {_data!r} {hex(datasum)}"
-                )
+                msg = f"Packet checksum does not match : {_data!r} {hex(datasum)}"
+                raise ValueError(msg)
 
         data = DataIterator(_data)
         _LOGGER.debug("Decoding bytes: '%s'", _data)
@@ -384,26 +439,32 @@ class Packet:
         start = data.take_hex()
 
         address = None
-        if has_address(start, len(_data)):
+        if _has_address(start, len(_data)):
             address = data.take_hex(half=is_input_ui_req)
 
         length = data.take_hex()
         data_length = length & 0x7F
         seq = length >> 7
         command = CommandType(data.take_hex())
-        msg_data = data.take_bytes(data_length, half=is_input_ui_req)
+        msg_data = data.take_bytes(data_length, hex_format=not is_input_ui_req)
         timestamp = None
-        if has_timestamp(start):
-            timestamp = decode_timestamp(data.take_bytes(6))
+        if bool(Packet.START_BYTE_TIMESTAMP_INCLUDED & start):
+            timestamp = _decode_timestamp(data.take_bytes(6, hex_format=True))
 
         # TODO(NW): Figure out checksum validation
-        checksum = data.take_hex()  # noqa
+        checksum = data.take_hex()
 
         if not data.is_consumed():
-            raise ValueError("Unable to consume all data")
+            msg = "Unable to consume all data"
+            raise ValueError(msg)
+
+        is_user_interface_resp = (
+            start == Packet.USER_INTERFACE_RESPONSE_FIXED_START_BYTE
+            and command == CommandType.USER_INTERFACE
+        )
 
         return Packet(
-            is_user_interface_resp=is_user_interface_resp(start, command),
+            is_user_interface_resp=is_user_interface_resp,
             address=address,
             seq=seq,
             command=command,
@@ -414,66 +475,78 @@ class Packet:
 
 
 class DataIterator:
-    def __init__(self, data: str):
+    """Data Buffer that allows taking incremental byte amounts."""
+
+    def __init__(self, data: str) -> None:
+        """Create a DataIterator with a specified string."""
         self._data = data
         self._position = 0
 
-    def take_bytes(self, n: int, half: bool = False) -> str:
-        multi = 2 if not half else 1
+    def take_bytes(self, n: int, *, hex_format: bool = False) -> str:
+        multi = 2 if hex_format else 1
         position = self._position
         self._position += n * multi
         if self._position > len(self._data):
-            raise ValueError("Unable to take more data than exists")
+            msg = "Unable to take more data than exists"
+            raise ValueError(msg)
 
         return self._data[position : self._position]
 
-    def take_hex(self, half: bool = False) -> int:
-        return int(self.take_bytes(1, half), 16)
+    def take_hex(self, *, half: bool = False) -> int:
+        return int(self.take_bytes(1, non_hex_format=half), 16)
 
     def is_consumed(self) -> bool:
         return self._position >= len(self._data)
 
 
-def has_address(start: int, data_length: int) -> bool:
+def _has_address(start: int, data_length: int) -> bool:
     """
     Determine whether the packet has an "address" encoded into it.
+
     There exists an undocumented bug/edge case in the spec - some packets
     with 0x82 as _start_, still encode the address into the packet, and thus
     throws off decoding. This edge case is handled explicitly.
     """
-    return bool(0x01 & start) or (start == 0x82 and data_length == 16)
+    return bool(Packet.START_BYTE_ADDRESS_INCLUDED & start) or (
+        start == Packet.USER_INTERFACE_RESPONSE_FIXED_START_BYTE
+        and data_length == Packet.USER_INTERFACE_RESPONSE_ENCODED_LENGTH
+    )
 
 
-def has_timestamp(start: int) -> bool:
-    return bool(0x04 & start)
+def _is_user_interface_req(start: int, command: CommandType) -> bool:
+    return (
+        start == Packet.USER_INTERFACE_REQUEST_FIXED_START_BYTE
+        and command == CommandType.USER_INTERFACE
+    )
 
 
-def is_user_interface_req(start: int, command: CommandType) -> bool:
-    return start == 0x83 and command == CommandType.USER_INTERFACE
-
-
-def is_user_interface_resp(start: int, command: CommandType) -> bool:
-    return start == 0x82 and command == CommandType.USER_INTERFACE
-
-
-def decode_timestamp(data: str) -> datetime.datetime:
+def _decode_timestamp(data: str) -> datetime.datetime:
     """
     Decode timestamp using bespoke decoder.
+
     Cannot use simple strptime since the ness panel contains a bug
     that P199E zone and state updates emitted on the hour cause a minute
     value of `60` to be sent, causing strptime to fail. This decoder handles
     this edge case.
     """
+    seconds_in_minute = 60
+
     year = 2000 + int(data[0:2])
     month = int(data[2:4])
     day = int(data[4:6])
     hour = int(data[6:8])
     minute = int(data[8:10])
     second = int(data[10:12])
-    if minute == 60:
+    if minute == seconds_in_minute:
         minute = 0
         hour += 1
 
     return datetime.datetime(
-        year=year, month=month, day=day, hour=hour, minute=minute, second=second
+        year=year,
+        month=month,
+        day=day,
+        hour=hour,
+        minute=minute,
+        second=second,
+        tzinfo=datetime.UTC,
     )

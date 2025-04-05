@@ -1,15 +1,18 @@
 import asyncio
-from dataclasses import dataclass
 import datetime
 import logging
-from asyncio import CancelledError, TimeoutError, sleep
-from typing import Optional, Callable, Dict, cast
+from asyncio import CancelledError, sleep
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import Enum
+from typing import cast
 
 from justbackoff import Backoff
 
-from .alarm import ArmingState, Alarm, ArmingMode
+from .alarm import Alarm, ArmingMode, ArmingState, ZoneSealedState
 from .connection import Connection, IP232Connection, Serial232Connection
 from .event import (
+    ArmingUpdate,
     AuxiliaryOutputsUpdate,
     BaseEvent,
     MiscellaneousAlarmsUpdate,
@@ -18,7 +21,6 @@ from .event import (
     StatusUpdate,
     ViewStateUpdate,
     ZoneUpdate,
-    ArmingUpdate,
 )
 from .packet import CommandType, Packet
 
@@ -45,12 +47,12 @@ class ZoneStatus:
 @dataclass
 class AllStatus:
     Zones: list[ZoneStatus]
-    MiscellaneousAlarms: Optional[MiscellaneousAlarmsUpdate]
-    Arming: Optional[ArmingUpdate]
-    Outputs: Optional[OutputsUpdate]
-    ViewState: Optional[ViewStateUpdate]
-    PanelVersion: Optional[PanelVersionUpdate]
-    AuxiliaryOutputs: Optional[AuxiliaryOutputsUpdate]
+    MiscellaneousAlarms: MiscellaneousAlarmsUpdate | None
+    Arming: ArmingUpdate | None
+    Outputs: OutputsUpdate | None
+    ViewState: ViewStateUpdate | None
+    PanelVersion: PanelVersionUpdate | None
+    AuxiliaryOutputs: AuxiliaryOutputsUpdate | None
 
 
 class Client:
@@ -66,30 +68,36 @@ class Client:
     bad_received_packets: int
     disconnection_count: int
     alarm: Alarm
-    _on_event_received: Optional[Callable[[BaseEvent], None]]
+    _on_event_received: Callable[[BaseEvent], None] | None
     _connection: Connection
     _closed: bool
     _backoff: Backoff
     _connect_lock: asyncio.Lock
     _write_lock: asyncio.Lock
-    _last_recv: Optional[datetime.datetime]
-    _last_sent_time: Optional[datetime.datetime]
+    _last_recv: datetime.datetime | None
+    _last_sent_time: datetime.datetime | None
     _update_interval: int
-    _requests_awaiting_response: Dict[
-        StatusUpdate.RequestID, Optional[asyncio.Future[StatusUpdate]]
+    _requests_awaiting_response: dict[
+        StatusUpdate.RequestID, asyncio.Future[StatusUpdate] | None
     ]
 
     DELAY_SECONDS_BETWEEN_SENDS = 0.2
 
+    class AuxState(Enum):
+        """Auxiliary output states - either active or inactive."""
+
+        INACTIVE = False
+        ACTIVE = True
+
     def __init__(
         self,
-        connection: Optional[Connection] = None,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        serial_tty: Optional[str] = None,
+        connection: Connection | None = None,
+        host: str | None = None,
+        port: int | None = None,
+        serial_tty: str | None = None,
         update_interval: int = 60,
         infer_arming_state: bool = False,
-        alarm: Optional[Alarm] = None,
+        alarm: Alarm | None = None,
     ):
         if connection is None:
             if host is not None and port is not None:
@@ -97,9 +105,8 @@ class Client:
             elif serial_tty is not None:
                 connection = Serial232Connection(tty_path=serial_tty)
             else:
-                raise ValueError(
-                    "Must provide host+port or serial_tty or connection object"
-                )
+                msg = "Must provide host+port or serial_tty or connection object"
+                raise ValueError(msg)
 
         if alarm is None:
             alarm = Alarm(infer_arming_state=infer_arming_state)
@@ -120,45 +127,89 @@ class Client:
 
         _LOGGER.debug("Client init() _requests_awaiting_response")
         self._requests_awaiting_response = {}
-        for id in StatusUpdate.RequestID:
-            self._requests_awaiting_response[id] = None
+        for req_id in StatusUpdate.RequestID:
+            self._requests_awaiting_response[req_id] = None
 
-    async def arm_away(self, code: Optional[str] = None) -> None:
+    async def arm_away(self, code: str | None = None) -> None:
+        """
+        Send the 'Arm-away' command to the Ness alarm device.
+
+        :param code: The user code to send
+        """
         command = "A{}E".format(code if code else "")
         return await self.send_command(command)
 
-    async def arm_home(self, code: Optional[str] = None) -> None:
+    async def arm_home(self, code: str | None = None) -> None:
+        """
+        Send the 'Arm-home' command to the Ness alarm device.
+
+        :param code: The user code to send
+        """
         command = "H{}E".format(code if code else "")
         return await self.send_command(command)
 
-    async def disarm(self, code: Optional[str]) -> None:
+    async def disarm(self, code: str | None) -> None:
+        """
+        Send the 'Disarm' command to the Ness alarm device.
+
+        :param code: The user code to send
+        """
         command = "{}E".format(code if code else "")
         return await self.send_command(command)
 
-    async def panic(self, code: Optional[str]) -> None:
+    async def panic(self, code: str | None) -> None:
+        """
+        Send the 'Panic' command to the Ness alarm device.
+
+        :param code: The user code to send
+        """
         command = "*{}E".format(code if code else "")
         return await self.send_command(command)
 
-    async def enter_user_program_mode(self, master_code: Optional[str] = "123") -> None:
+    async def enter_user_program_mode(self, master_code: str | None = "123") -> None:
+        """
+        Switch to 'user-program' mode.
+
+        :param master_code: The master code for the alarm
+                            (User-code 1) (Factory default '123')
+        """
         command = "M{}E".format(master_code if master_code else "")
         return await self.send_command(command)
 
     async def enter_installer_program_mode(
-        self, installer_code: Optional[str] = "000000"
+        self, installer_code: str | None = "000000"
     ) -> None:
+        """
+        Switch to 'installer-program' mode.
+
+        :param installer_code: The installer code for the alarm
+                               (Factory default '000000')
+        """
         command = "M{}E".format(installer_code if installer_code else "")
         return await self.send_command(command)
 
     async def exit_program_mode(self) -> None:
+        """
+        Exit user-program or installer-program mode.
+
+        Switches to operating mode
+        """
         command = "ME"
         return await self.send_command(command)
 
-    async def aux(self, output_id: int, state: bool = True) -> None:
+    async def aux(self, output_id: int, state: AuxState = AuxState.ACTIVE) -> None:
+        """
+        Set one of the auxilliary outputs.
+
+        :param output_id: Which aux output to change.
+                          (1, 2, 3, or 4)
+        :param state: if true, set aux active, otherwise inactive
+        """
         command = "{}{}{}".format(output_id, output_id, "*" if state else "#")
         return await self.send_command(command)
 
     async def update(self) -> None:
-        """Force update of alarm status and zones"""
+        """Force update of alarm status and zones."""
         _LOGGER.debug("Requesting state update from server (S00, S05, S14)")
         await asyncio.gather(
             # List unsealed Zones
@@ -191,8 +242,7 @@ class Client:
             # self.send_command("S14"),
         )
 
-
-    async def update_wait(self) -> (list[bool], ):
+    async def update_wait(self) -> (list[bool],):
         """Force update of ZoneInputUnsealed status and Arming Status"""
         _LOGGER.debug("Requesting state update from server (S00, S14)")
         (
@@ -248,13 +298,13 @@ class Client:
         return AllStatus(
             Zones=zones,
             MiscellaneousAlarms=cast(
-                Optional[MiscellaneousAlarmsUpdate], miscellaneous_alarms
+                MiscellaneousAlarmsUpdate | None, miscellaneous_alarms
             ),
-            Arming=cast(Optional[ArmingUpdate], arming),
-            Outputs=cast(Optional[OutputsUpdate], outputs),
-            ViewState=cast(Optional[ViewStateUpdate], view_state),
-            PanelVersion=cast(Optional[PanelVersionUpdate], panel_version),
-            AuxiliaryOutputs=cast(Optional[AuxiliaryOutputsUpdate], auxiliary_outputs),
+            Arming=cast(ArmingUpdate | None, arming),
+            Outputs=cast(OutputsUpdate | None, outputs),
+            ViewState=cast(ViewStateUpdate | None, view_state),
+            PanelVersion=cast(PanelVersionUpdate | None, panel_version),
+            AuxiliaryOutputs=cast(AuxiliaryOutputsUpdate | None, auxiliary_outputs),
         )
 
     async def update_all_wait(self) -> AllStatus:
@@ -367,13 +417,13 @@ class Client:
         return AllStatus(
             Zones=zones,
             MiscellaneousAlarms=cast(
-                Optional[MiscellaneousAlarmsUpdate], miscellaneous_alarms
+                MiscellaneousAlarmsUpdate | None, miscellaneous_alarms
             ),
-            Arming=cast(Optional[ArmingUpdate], arming),
-            Outputs=cast(Optional[OutputsUpdate], outputs),
-            ViewState=cast(Optional[ViewStateUpdate], view_state),
-            PanelVersion=cast(Optional[PanelVersionUpdate], panel_version),
-            AuxiliaryOutputs=cast(Optional[AuxiliaryOutputsUpdate], auxiliary_outputs),
+            Arming=cast(ArmingUpdate | None, arming),
+            Outputs=cast(OutputsUpdate | None, outputs),
+            ViewState=cast(ViewStateUpdate | None, view_state),
+            PanelVersion=cast(PanelVersionUpdate | None, panel_version),
+            AuxiliaryOutputs=cast(AuxiliaryOutputsUpdate | None, auxiliary_outputs),
         )
 
     async def _connect(self) -> None:
@@ -390,16 +440,18 @@ class Client:
                     await self._connection.connect()
                     self.connected_count += 1
                     _LOGGER.debug("_connect() - connected")
-                    self._last_recv = datetime.datetime.now()
+                    self._last_recv = datetime.datetime.now(tz=datetime.UTC)
                 except (ConnectionRefusedError, OSError) as e:
                     _LOGGER.warning(
-                        f"Failed to connect: {e} - "
-                        f"sleeping backoff {self._backoff.duration()}"
+                        "Failed to connect: %s - sleeping backoff %s",
+                        e,
+                        self._backoff.duration(),
                     )
                     try:
                         await sleep(self._backoff.duration())
-                    except asyncio.CancelledError:
-                        pass  # cancelled = closing
+                    except asyncio.CancelledError as e:
+                        # Cancelled - closing
+                        _LOGGER.debug("Ignoring exception during closing : %s", e)
 
             self._backoff.reset()
         _LOGGER.debug("_connect() - unlocked")
@@ -408,7 +460,7 @@ class Client:
         self,
         command: str,
         address: int = 0,
-        finished_future: Optional[asyncio.Future[StatusUpdate]] = None,
+        finished_future: asyncio.Future[StatusUpdate] | None = None,
     ) -> None:
         # Input Commands must use:
         # Start byte: 0x83
@@ -434,15 +486,17 @@ class Client:
         )
         if is_status_request and finished_future is not None:
             # Look up list of existing requests awaiting responses
-            id = StatusUpdate.RequestID(int(command[1:]))
-            current = self._requests_awaiting_response[id]
+            req_id = StatusUpdate.RequestID(int(command[1:]))
+            current = self._requests_awaiting_response[req_id]
             if current is not None:
-                _LOGGER.debug(f"cancelling existing {current}")
+                _LOGGER.debug("cancelling existing %s", current)
                 current.cancel()
-            _LOGGER.debug(f"send_command Adding future {finished_future} for {id}")
-            self._requests_awaiting_response[id] = finished_future
             _LOGGER.debug(
-                f"send_command added future {self._requests_awaiting_response}"
+                "send_command Adding future %S for %s", finished_future, req_id
+            )
+            self._requests_awaiting_response[req_id] = finished_future
+            _LOGGER.debug(
+                "send_command added future %s", self._requests_awaiting_response
             )
 
         _LOGGER.debug("send_command() connecting")
@@ -451,77 +505,78 @@ class Client:
             payload = packet.encode()
 
             # Check if a delay is needed to avoid overwhelming the Ness Alarm
-            now = datetime.datetime.now()
+            now = datetime.datetime.now(tz=datetime.UTC)
             if self._last_sent_time is not None:
                 time_since_last_send_delta: datetime.timedelta = (
                     now - self._last_sent_time
                 )
                 time_since_last_send: float = time_since_last_send_delta.total_seconds()
-                _LOGGER.debug(f"time_since_last_send = {time_since_last_send}")
+                _LOGGER.debug("time_since_last_send = %s", time_since_last_send)
                 if time_since_last_send < Client.DELAY_SECONDS_BETWEEN_SENDS:
                     sleep_time = (
                         Client.DELAY_SECONDS_BETWEEN_SENDS - time_since_last_send
                     )
-                    _LOGGER.debug(f"sleeping for {sleep_time} seconds from {now}")
+                    _LOGGER.debug("sleeping for %s seconds from %s", sleep_time, now)
                     await asyncio.sleep(sleep_time)
-                    now = datetime.datetime.now()
-                    _LOGGER.debug(f"time after sleep {now}")
+                    now = datetime.datetime.now(tz=datetime.UTC)
+                    _LOGGER.debug("time after sleep %s", now)
 
-            _LOGGER.debug(f"Sending packet: {packet}")
-            _LOGGER.debug(f"send_command() - Sending payload: {payload}")
-            # _LOGGER.debug(f"XXX: {Packet.decode(payload)}")
+            _LOGGER.debug("Sending packet: %s", packet)
+            _LOGGER.debug("send_command() - Sending payload: %s", payload)
+
             self._last_sent_time = now
             return await self._connection.write(payload.encode("ascii"))
 
     async def request_and_wait_status_update(
-        self, id: StatusUpdate.RequestID, address: int = 0, retries: int = 3
-    ) -> Optional[StatusUpdate]:
+        self, req_id: StatusUpdate.RequestID, address: int = 0, retries: int = 3
+    ) -> StatusUpdate | None:
         """Send a Status Update Request and wait for a response."""
         while retries > 0:
             try:
                 f: asyncio.Future[StatusUpdate] = asyncio.Future()
-                _LOGGER.debug(f"Adding future {f} for {id}")
+                _LOGGER.debug("Adding future %s for %s", f, req_id)
                 await self.send_command(
-                    f"S{id.value:02}", address=address, finished_future=f
+                    f"S{req_id.value:02}", address=address, finished_future=f
                 )
 
                 await asyncio.wait_for(f, 2.0)
-                _LOGGER.debug(f"Finished waiting for status response: {f}")
+                _LOGGER.debug("Finished waiting for status response: %s", f)
                 if f.done():
                     return f.result()
             except (TimeoutError, CancelledError):
                 _LOGGER.warning(
-                    f"Timed out waiting for response to Status Request: {id}"
+                    "Timed out waiting for response to Status Request: %s", req_id
                 )
 
             retries -= 1
             _LOGGER.warning(
-                f"retrying request_and_wait_status_update - retries remaining:{retries}"
+                "retrying request_and_wait_status_update - retries remaining:%s",
+                retries,
             )
 
         return None
 
     async def _recv_loop(self) -> None:
         while not self._closed:
-            _LOGGER.debug(f"_recv_loop() - connecting - closed={self._closed}")
+            _LOGGER.debug("_recv_loop() - connecting - closed=%s", self._closed)
             await self._connect()
             _LOGGER.debug("_recv_loop() - connected")
 
             while True:
                 _LOGGER.debug("_recv_loop() - reading")
                 data = await self._connection.read()
-                _LOGGER.debug(f"_recv_loop() - read got {data!r}")
+                _LOGGER.debug("_recv_loop() - read got %s", data)
                 if data is None:
                     self.disconnection_count += 1
                     _LOGGER.debug("Received None data from connection.read()")
                     break
 
-                self._last_recv = datetime.datetime.now()
+                self._last_recv = datetime.datetime.now(tz=datetime.UTC)
                 try:
                     decoded_data = data.decode("ascii")
                 except UnicodeDecodeError:
                     self.bad_received_packets += 1
-                    _LOGGER.warning(f"Failed to decode data : {data!r}", exc_info=True)
+                    _LOGGER.warning("Failed to decode data : %s", data, exc_info=True)
                     continue
 
                 _LOGGER.debug("Decoding data: '%s'", decoded_data)
@@ -534,24 +589,24 @@ class Client:
                         _LOGGER.warning("Failed to decode packet", exc_info=True)
                         continue
 
-                    _LOGGER.debug(f"Decoded event: {event}")
+                    _LOGGER.debug("Decoded event: %s", event)
                     # Check if the received packet is a response to a Status Update
                     #  Request which is awaiting the response
                     if isinstance(event, StatusUpdate):
                         f = self._requests_awaiting_response[event.request_id]
                         if f is not None:
-                            _LOGGER.debug(f"Waiter for {event} :  {f}")
+                            _LOGGER.debug("Waiter for %s :  %s", event, f)
                             try:
                                 f.set_result(event)
                             except asyncio.exceptions.InvalidStateError as e:
-                                _LOGGER.info(f"Waiter already set for {f} : {e}")
+                                _LOGGER.info("Waiter already set for %s : %s", f, e)
                             self._requests_awaiting_response[event.request_id] = None
                         else:
                             _LOGGER.debug(
-                                f"No waiter {self._requests_awaiting_response}"
+                                "No waiter %s", self._requests_awaiting_response
                             )
                     else:
-                        _LOGGER.debug(f"Not StatusUpdate: {type(event)}")
+                        _LOGGER.debug("Not StatusUpdate: %s", type(event))
 
                     if self._on_event_received is not None:
                         self._on_event_received(event)
@@ -559,8 +614,8 @@ class Client:
                     self.alarm.handle_event(event)
 
     def _should_reconnect(self) -> bool:
-        now = datetime.datetime.now()
-        _LOGGER.debug(f"now={now} last_recv={self._last_recv}")
+        now = datetime.datetime.now(tz=datetime.UTC)
+        _LOGGER.debug("now=%s last_recv=%s", now, self._last_recv)
         return (
             self._last_recv is not None
             and self._last_recv
@@ -568,12 +623,12 @@ class Client:
         )
 
     async def _update_loop(self) -> None:
-        """Schedule a state update to keep the connection alive"""
-        _LOGGER.debug(f"_update_loop sleeping for {self._update_interval}")
+        """Schedule a state update to keep the connection alive."""
+        _LOGGER.debug("_update_loop sleeping for %s", self._update_interval)
         await asyncio.sleep(self._update_interval)
         while not self._closed:
             await self.update()
-            _LOGGER.debug(f"_update_loop sleeping for {self._update_interval}")
+            _LOGGER.debug("_update_loop sleeping for %s", self._update_interval)
             await asyncio.sleep(self._update_interval)
 
     async def keepalive(self) -> None:
@@ -590,19 +645,19 @@ class Client:
         await self._connection.close()
 
     def on_state_change(
-        self, f: Optional[Callable[[ArmingState, ArmingMode | None], None]]
-    ) -> Optional[Callable[[ArmingState, ArmingMode | None], None]]:
+        self, f: Callable[[ArmingState, ArmingMode | None], None] | None
+    ) -> Callable[[ArmingState, ArmingMode | None], None] | None:
         self.alarm.on_state_change(f)
         return f
 
     def on_zone_change(
-        self, f: Optional[Callable[[int, bool], None]]
-    ) -> Optional[Callable[[int, bool], None]]:
+        self, f: Callable[[int, ZoneSealedState], None] | None
+    ) -> Callable[[int, ZoneSealedState], None] | None:
         self.alarm.on_zone_change(f)
         return f
 
     def on_event_received(
-        self, f: Optional[Callable[[BaseEvent], None]]
-    ) -> Optional[Callable[[BaseEvent], None]]:
+        self, f: Callable[[BaseEvent], None] | None
+    ) -> Callable[[BaseEvent], None] | None:
         self._on_event_received = f
         return f

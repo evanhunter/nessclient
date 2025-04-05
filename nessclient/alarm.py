@@ -1,14 +1,17 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Callable, List
 
-from .event import BaseEvent, ZoneUpdate, ArmingUpdate, SystemStatusEvent
-
+from .alarm import Alarm
+from .event import ArmingUpdate, BaseEvent, SystemStatusEvent, ZoneUpdate
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class ArmingState(Enum):
+    """Arming States used with on_state_change() callback."""
+
     UNKNOWN = "UNKNOWN"
     DISARMED = "DISARMED"
     ARMING = "ARMING"
@@ -19,6 +22,8 @@ class ArmingState(Enum):
 
 
 class ArmingMode(Enum):
+    """Armed Modes used with on_state_change() callback."""
+
     ARMED_AWAY = "ARMED_AWAY"
     ARMED_HOME = "ARMED_HOME"
     ARMED_DAY = "ARMED_DAY"
@@ -27,38 +32,51 @@ class ArmingMode(Enum):
     ARMED_HIGHEST = "ARMED_HIGHEST"
 
 
-class Alarm:
-    """
-    In-memory representation of the state of the alarm the client is connected
-    to.
-    """
+class ZoneSealedState(Enum):
+    """Zone sealed states - either sealed or unseald."""
 
-    ARM_EVENTS_MAP = {
-        SystemStatusEvent.EventType.ARMED_AWAY: ArmingMode.ARMED_AWAY,
-        SystemStatusEvent.EventType.ARMED_HOME: ArmingMode.ARMED_HOME,
-        SystemStatusEvent.EventType.ARMED_DAY: ArmingMode.ARMED_DAY,
-        SystemStatusEvent.EventType.ARMED_NIGHT: ArmingMode.ARMED_NIGHT,
-        SystemStatusEvent.EventType.ARMED_VACATION: ArmingMode.ARMED_VACATION,
-        SystemStatusEvent.EventType.ARMED_HIGHEST: ArmingMode.ARMED_HIGHEST,
-    }
+    SEALED = False
+    UNSEALED = True
+
+
+ARM_EVENTS_MAP = {
+    SystemStatusEvent.EventType.ARMED_AWAY: ArmingMode.ARMED_AWAY,
+    SystemStatusEvent.EventType.ARMED_HOME: ArmingMode.ARMED_HOME,
+    SystemStatusEvent.EventType.ARMED_DAY: ArmingMode.ARMED_DAY,
+    SystemStatusEvent.EventType.ARMED_NIGHT: ArmingMode.ARMED_NIGHT,
+    SystemStatusEvent.EventType.ARMED_VACATION: ArmingMode.ARMED_VACATION,
+    SystemStatusEvent.EventType.ARMED_HIGHEST: ArmingMode.ARMED_HIGHEST,
+}
+
+
+class Alarm:
+    """In-memory representation of the state of the alarm the client is connected to."""
 
     @dataclass
     class Zone:
-        triggered: Optional[bool]
+        """Represents the current sealed state for an alarm zone."""
+
+        triggered: ZoneSealedState | None
 
     def __init__(self, infer_arming_state: bool = False) -> None:
         self._infer_arming_state = infer_arming_state
         self.arming_state: ArmingState = ArmingState.UNKNOWN
-        self.zones: List[Alarm.Zone] = [Alarm.Zone(triggered=None) for _ in range(16)]
+        self.zones: list[Alarm.Zone] = [Alarm.Zone(triggered=None) for _ in range(16)]
 
         self._arming_mode: ArmingMode | None = None
 
-        self._on_state_change: Optional[
-            Callable[[ArmingState, ArmingMode | None], None]
-        ] = None
-        self._on_zone_change: Optional[Callable[[int, bool], None]] = None
+        self._on_state_change: (
+            Callable[[ArmingState, ArmingMode | None], None] | None
+        ) = None
+
+        self._on_zone_change: Callable[[int, ZoneSealedState], None] | None = None
 
     def handle_event(self, event: BaseEvent) -> None:
+        """
+        Forward event to appropriate handlers.
+
+        Handlers will keep alarm state up-to-date and call callbacks as needed
+        """
         if isinstance(event, ArmingUpdate):
             self._handle_arming_update(event)
         elif (
@@ -73,107 +91,130 @@ class Alarm:
             self._handle_zone_alarm_update(event)
         elif isinstance(event, SystemStatusEvent):
             self._handle_system_status_event(event)
-
-
+        else:
+            # Other StatusUpdate types: MiscellaneousAlarmsUpdate,
+            # OutputsUpdate, ViewStateUpdate, PanelVersionUpdate,
+            # AuxiliaryOutputsUpdate
+            _LOGGER.debug("Not handling event %s", event)
 
     def _handle_arming_update(self, update: ArmingUpdate) -> None:
         # Note: ArmingUpdate cannot indicate whether the alarm is currently triggered
-        #       This can only be obtained from the ZONE_IN_ALARM ZoneUpdate StatusUpdate or
-        #       from the ALARM System-Status Event
-        
-        _LOGGER.debug(f"Handling ArmingUpdate - current state: {self.arming_state}  update: {update}")
+        #       This can only be obtained from the ZONE_IN_ALARM ZoneUpdate StatusUpdate
+        #       or from the ALARM System-Status Event
+
+        _LOGGER.debug(
+            "Handling ArmingUpdate - current state: %s  update: %s",
+            self.arming_state,
+            update,
+        )
         if self.arming_state == ArmingState.TRIGGERED:
-            # Skip update, since we cannot determine from this message whether the alarm is still triggered
+            # Skip update, since we cannot determine from this message whether the
+            # alarm is still triggered
             pass
         elif update.status == [ArmingUpdate.ArmingStatus.AREA_1_ARMED]:
-            return self._update_arming_state(ArmingState.EXIT_DELAY)
+            self._update_arming_state(ArmingState.EXIT_DELAY)
         elif (
             ArmingUpdate.ArmingStatus.AREA_1_ARMED in update.status
             and ArmingUpdate.ArmingStatus.AREA_1_FULLY_ARMED in update.status
         ):
-            return self._update_arming_state(ArmingState.ARMED)
-        else:
-            if self._infer_arming_state:
-                # State inference is enabled. Therefore the arming state can
-                # only be reverted to disarmed via a system status event.
-                # This works around a bug with some panels (<v5.8) which emit
-                # update.status = [] when they are armed.
-                # TODO(NW): It would be ideal to find a better way to
-                #  query this information on-demand, but for now this should
-                #  resolve the issue.
-                if self.arming_state == ArmingState.UNKNOWN:
-                    return self._update_arming_state(ArmingState.DISARMED)
+            self._update_arming_state(ArmingState.ARMED)
+        elif self._infer_arming_state:
+            # State inference is enabled. Therefore the arming state can
+            # only be reverted to disarmed via a system status event.
+            # This works around a bug with some panels (<v5.8) which emit
+            # update.status = [] when they are armed.
+            # TODO(NW): It would be ideal to find a better way to
+            #  query this information on-demand, but for now this should
+            #  resolve the issue.
+            if self.arming_state == ArmingState.UNKNOWN:
+                self._update_arming_state(ArmingState.DISARMED)
             else:
-                # State inference is disabled, therefore we can assume the
-                # panel is "disarmed" as it did not have any arming flags set
-                # in the arming update status as per the documentation.
-                # Note: This may not be correct and may not correctly represent
-                # other modes of arming other than ARMED_AWAY.
-                # TODO(NW): Perform some testing to determine how the client
-                #  handles other arming modes.
-                return self._update_arming_state(ArmingState.DISARMED)
+                pass
+        else:
+            # State inference is disabled, therefore we can assume the
+            # panel is "disarmed" as it did not have any arming flags set
+            # in the arming update status as per the documentation.
+            # Note: This may not be correct and may not correctly represent
+            # other modes of arming other than ARMED_AWAY.
+            # TODO(NW): Perform some testing to determine how the client
+            #  handles other arming modes.
+            self._update_arming_state(ArmingState.DISARMED)
 
     def _handle_zone_input_update(self, update: ZoneUpdate) -> None:
-        for i, zone in enumerate(self.zones):
+        """Handle Zone Unsealed updates."""
+        for i in range(len(self.zones)):
             zone_id = i + 1
-            name = "ZONE_{}".format(zone_id)
+            name = f"ZONE_{zone_id}"
             if ZoneUpdate.Zone[name] in update.included_zones:
-                self._update_zone(zone_id, True)
+                self._update_zone(zone_id, ZoneSealedState.UNSEALED)
             else:
-                self._update_zone(zone_id, False)
+                self._update_zone(zone_id, ZoneSealedState.SEALED)
 
     def _handle_zone_alarm_update(self, update: ZoneUpdate) -> None:
-        _LOGGER.debug(f"Handling Zone Alarm ZoneUpdate - update: {update}")
-        for i, zone in enumerate(self.zones):
+        _LOGGER.debug("Handling Zone Alarm ZoneUpdate - update: %s", update)
+        for i in range(len(self.zones)):
             zone_id = i + 1
-            name = "ZONE_{}".format(zone_id)
+            name = f"ZONE_{zone_id}"
             if ZoneUpdate.Zone[name] in update.included_zones:
                 self._update_arming_state(ArmingState.TRIGGERED)
                 return
-        
-        # No zones are in alarm - if the current state is triggered, set 
+
+        # No zones are in alarm - if the current state is triggered, set
         # it back to unknown so a subsequent ArmingUpdate can set it correctly
         if self.arming_state == ArmingState.TRIGGERED:
             self._update_arming_state(ArmingState.UNKNOWN)
 
-        
     def _handle_system_status_event(self, event: SystemStatusEvent) -> None:
         """
+        Handle a system status event received from the Ness Alarm.
+
+        Update the internal state to match the Ness Alarm
+
         DISARMED -> ARMED_AWAY -> EXIT_DELAY_START -> EXIT_DELAY_END
          (trip): -> ALARM -> OUTPUT_ON -> ALARM_RESTORE
             (disarm): -> DISARMED -> OUTPUT_OFF
          (disarm): -> DISARMED
          (disarm before EXIT_DELAY_END): -> DISARMED -> EXIT_DELAY_END
 
-        TODO(NW): Check ALARM_RESTORE state transition to move back into ARMED_AWAY state
+        TODO(NW): Check ALARM_RESTORE state transition to move back
+                  into ARMED_AWAY state
         """
-        _LOGGER.debug(f"Handling ArmingUpdate - current state: {self.arming_state}  event: {event}")
+        _LOGGER.debug(
+            "Handling ArmingUpdate - current state: %s  event: %s",
+            self.arming_state,
+            event,
+        )
+
         if event.type == SystemStatusEvent.EventType.UNSEALED:
-            return self._update_zone(event.zone, True)
+            self._update_zone(event.zone, ZoneSealedState.UNSEALED)
         elif event.type == SystemStatusEvent.EventType.SEALED:
-            return self._update_zone(event.zone, False)
+            self._update_zone(event.zone, ZoneSealedState.SEALED)
         elif event.type == SystemStatusEvent.EventType.ALARM:
-            return self._update_arming_state(ArmingState.TRIGGERED)
+            self._update_arming_state(ArmingState.TRIGGERED)
         elif event.type == SystemStatusEvent.EventType.ALARM_RESTORE:
             if self.arming_state != ArmingState.DISARMED:
-                return self._update_arming_state(ArmingState.ARMED)
+                self._update_arming_state(ArmingState.ARMED)
+            else:
+                pass
         elif event.type == SystemStatusEvent.EventType.ENTRY_DELAY_START:
-            return self._update_arming_state(ArmingState.ENTRY_DELAY)
+            self._update_arming_state(ArmingState.ENTRY_DELAY)
         elif event.type == SystemStatusEvent.EventType.ENTRY_DELAY_END:
             pass
         elif event.type == SystemStatusEvent.EventType.EXIT_DELAY_START:
-            return self._update_arming_state(ArmingState.EXIT_DELAY)
+            self._update_arming_state(ArmingState.EXIT_DELAY)
         elif event.type == SystemStatusEvent.EventType.EXIT_DELAY_END:
             # Exit delay finished - if we were in the process of arming update
             # state to armed
             if self.arming_state == ArmingState.EXIT_DELAY:
-                return self._update_arming_state(ArmingState.ARMED)
-        elif event.type in Alarm.ARM_EVENTS_MAP.keys():
-            self._arming_mode = Alarm.ARM_EVENTS_MAP[event.type]
-            return self._update_arming_state(ArmingState.ARMING)
+                self._update_arming_state(ArmingState.ARMED)
+            else:
+                pass
+        elif event.type in ARM_EVENTS_MAP:
+            self._arming_mode = ARM_EVENTS_MAP[event.type]
+            self._update_arming_state(ArmingState.ARMING)
         elif event.type == SystemStatusEvent.EventType.DISARMED:
             self._arming_mode = None  # Restore arming mode on disarmed.
-            return self._update_arming_state(ArmingState.DISARMED)
+            self._update_arming_state(ArmingState.DISARMED)
         elif event.type == SystemStatusEvent.EventType.ARMING_DELAYED:
             pass
 
@@ -183,7 +224,7 @@ class Alarm:
             if self._on_state_change is not None:
                 self._on_state_change(state, self._arming_mode)
 
-    def _update_zone(self, zone_id: int, state: bool) -> None:
+    def _update_zone(self, zone_id: int, state: ZoneSealedState) -> None:
         zone = self.zones[zone_id - 1]
         if zone.triggered != state:
             zone.triggered = state
@@ -191,9 +232,11 @@ class Alarm:
                 self._on_zone_change(zone_id, state)
 
     def on_state_change(
-        self, f: Optional[Callable[[ArmingState, ArmingMode | None], None]]
+        self, f: Callable[[ArmingState, ArmingMode | None], None] | None
     ) -> None:
+        """Set the callback that receives Arming state/mode updates."""
         self._on_state_change = f
 
-    def on_zone_change(self, f: Optional[Callable[[int, bool], None]]) -> None:
+    def on_zone_change(self, f: Callable[[int, ZoneSealedState], None] | None) -> None:
+        """Set the callback that receives Zone sealed/unsealed updates."""
         self._on_zone_change = f

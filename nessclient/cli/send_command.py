@@ -1,7 +1,7 @@
 import asyncio
+import logging
 
 import click
-import logging
 
 from ..client import Client
 

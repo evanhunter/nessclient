@@ -1,18 +1,18 @@
 import logging
 import random
 import threading
-from typing import List, Iterator, Optional
+from typing import Iterator, List
 
+from ...event import ArmingUpdate, StatusUpdate, SystemStatusEvent, ZoneUpdate
 from .alarm import Alarm
 from .server import Server
 from .zone import Zone
-from ...event import SystemStatusEvent, ArmingUpdate, ZoneUpdate, StatusUpdate
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class AlarmServer:
-    _simulation_end_event: Optional[threading.Event]
+    _simulation_end_event: threading.Event | None
     _simulation_thread: threading.Thread
     _master_code: str
 
@@ -26,9 +26,11 @@ class AlarmServer:
         )
         self._server = Server(handle_command=self._handle_command)
         if not isinstance(host, str):
-            raise ValueError("Host must be a valid string")
+            msg = "Host must be a valid string"
+            raise TypeError(msg)
         if not isinstance(port, int) or port < 0 or port > 65535:
-            raise ValueError("Host must be a valid integer 0-65535")
+            msg = "Host must be a valid integer 0-65535"
+            raise ValueError(msg)
         self._host = host
         self._port = port
         self._simulation_end_event = None
@@ -52,7 +54,7 @@ class AlarmServer:
         command = command.upper().strip()
         if command == "D":
             self._alarm.disarm()
-        elif command == "A" or command == "AA":
+        elif command in ("A", "AA"):
             self._alarm.arm(Alarm.ArmingMode.ARMED_AWAY)
         elif command == "AH":
             self._alarm.arm(Alarm.ArmingMode.ARMED_HOME)
@@ -101,9 +103,8 @@ class AlarmServer:
         state: Alarm.ArmingState,
         arming_mode: Alarm.ArmingMode | None,
     ) -> None:
-
         _LOGGER.debug(
-            f"Alarm state change {previous_state} -> {state}  mode {arming_mode}"
+            "Alarm state change %s -> %s  mode %s", previous_state, state, arming_mode
         )
         if state == Alarm.ArmingState.DISARMED:
             # Simulated movement in zones only makes sense in disarmed state
@@ -111,10 +112,10 @@ class AlarmServer:
         else:
             self._stop_simulation()
 
-        event_list = [
-            e for e in get_events_for_state_update(previous_state, state, arming_mode)
-        ]
-        _LOGGER.debug(f"events for state update: {event_list}")
+        event_list = list(
+            get_events_for_state_update(previous_state, state, arming_mode)
+        )
+        _LOGGER.debug("events for state update: %s", event_list)
         for event_type in event_list:
             event = SystemStatusEvent(
                 type=event_type, zone=0x00, area=0x00, timestamp=None, address=0
@@ -128,7 +129,7 @@ class AlarmServer:
         elif state == Zone.State.UNSEALED:
             type = SystemStatusEvent.EventType.UNSEALED
         else:
-            raise NotImplementedError()
+            raise NotImplementedError
 
         event = SystemStatusEvent(
             type=type,
@@ -141,17 +142,18 @@ class AlarmServer:
 
     def _handle_command(self, command: str) -> None:
         """
-        Responds to commands from a TCP client
+        Responds to commands from a TCP client.
+
         Handles Arm, Arm-Home, Disarm, Unsealed-Status & Arming-Status requests
         """
-        _LOGGER.info("Incoming User Command: {}".format(command))
-        if command == "AE" or command == f"A{self._master_code}E":
+        _LOGGER.info("Incoming User Command: %s", command)
+        if command in ("AE", f"A{self._master_code}E"):
             self._alarm.arm()
-        elif command == "HE" or command == f"H{self._master_code}E":
+        elif command in ("HE", f"H{self._master_code}E"):
             self._alarm.arm(Alarm.ArmingMode.ARMED_HOME)
-        elif command == "0E" or command == f"0{self._master_code}E":
+        elif command in ("0E", f"0{self._master_code}E"):
             self._alarm.arm(Alarm.ArmingMode.ARMED_DAY)
-        elif command == "*E" or command == f"*{self._master_code}E":
+        elif command in ("*E", f"*{self._master_code}E"):
             _LOGGER.info("setting panic")
             self._alarm._update_state_no_mode(Alarm.ArmingState.PANIC)
         elif (
@@ -185,7 +187,7 @@ class AlarmServer:
             address=0x00,
             timestamp=None,
         )
-        _LOGGER.debug(f"Received arming-status request - replying with {event}")
+        _LOGGER.debug("Received arming-status request - replying with %s", event)
         self._server.write_event(event)
 
     def _handle_zone_input_unsealed_status_update_request(self) -> None:
@@ -205,9 +207,7 @@ class AlarmServer:
         event = ZoneUpdate(
             request_id=StatusUpdate.RequestID.ZONE_IN_DELAY,
             included_zones=[
-                get_zone_for_id(z.id)
-                for z in self._alarm.zones
-                if z.in_delay
+                get_zone_for_id(z.id) for z in self._alarm.zones if z.in_delay
             ],
             address=0x00,
             timestamp=None,
@@ -218,9 +218,7 @@ class AlarmServer:
         event = ZoneUpdate(
             request_id=StatusUpdate.RequestID.ZONE_IN_ALARM,
             included_zones=[
-                get_zone_for_id(z.id)
-                for z in self._alarm.zones
-                if z.in_alarm
+                get_zone_for_id(z.id) for z in self._alarm.zones if z.in_alarm
             ],
             address=0x00,
             timestamp=None,
@@ -229,14 +227,15 @@ class AlarmServer:
 
     def _simulate_zone_events(self) -> None:
         """
-        Randomly toggles the sealed/unsealed state of a random zone
-        in a loop with pauses of 1-5 seconds between each
+        Randomly toggles the sealed/unsealed state of a random zones.
+
+        Toggles in a loop with pauses of 1-5 seconds between each
         """
         while (
             self._simulation_end_event is not None
-            and not self._simulation_end_event.wait(random.randint(1, 5))
+            and not self._simulation_end_event.wait(random.randint(1, 5))  # noqa: S311 - Random not used for cryptography
         ):
-            zone: Zone = random.choice(self._alarm.zones)
+            zone: Zone = random.choice(self._alarm.zones)  # noqa: S311 - Random not used for cryptography
             self._alarm.update_zone(zone.id, toggled_state(zone.state))
             _LOGGER.info("Toggled zone: %s", zone)
         _LOGGER.info("Simulation ended")
@@ -262,16 +261,17 @@ class AlarmServer:
 def mode_to_event(mode: Alarm.ArmingMode | None) -> SystemStatusEvent.EventType:
     if mode == Alarm.ArmingMode.ARMED_AWAY:
         return SystemStatusEvent.EventType.ARMED_AWAY
-    elif mode == Alarm.ArmingMode.ARMED_HOME:
+    if mode == Alarm.ArmingMode.ARMED_HOME:
         return SystemStatusEvent.EventType.ARMED_HOME
-    elif mode == Alarm.ArmingMode.ARMED_DAY:
+    if mode == Alarm.ArmingMode.ARMED_DAY:
         return SystemStatusEvent.EventType.ARMED_DAY
-    elif mode == Alarm.ArmingMode.ARMED_NIGHT:
+    if mode == Alarm.ArmingMode.ARMED_NIGHT:
         return SystemStatusEvent.EventType.ARMED_NIGHT
-    elif mode == Alarm.ArmingMode.ARMED_VACATION:
+    if mode == Alarm.ArmingMode.ARMED_VACATION:
         return SystemStatusEvent.EventType.ARMED_VACATION
-    else:
-        raise AssertionError("Unknown alarm mode")
+
+    msg = "Unknown alarm mode"
+    raise AssertionError(msg)
 
 
 def get_events_for_state_update(
@@ -285,16 +285,16 @@ def get_events_for_state_update(
         yield mode_to_event(arming_mode)
         yield SystemStatusEvent.EventType.EXIT_DELAY_START
 
-    _LOGGER.debug(f"get_events_for_state_update - state: {state}   arming_mode: {arming_mode}")
+    _LOGGER.debug(
+        "get_events_for_state_update - state: %s   arming_mode: %s", state, arming_mode
+    )
     if state == Alarm.ArmingState.TRIPPED:
         yield SystemStatusEvent.EventType.ALARM
 
     # When state transitions from EXIT_DELAY, trigger EXIT_DELAY_END.
     if (
-        previous_state == Alarm.ArmingState.EXIT_DELAY
-        and state != previous_state
-        or state == Alarm.ArmingState.ARMED
-    ):
+        (previous_state == Alarm.ArmingState.EXIT_DELAY) and (state != previous_state)
+    ) or (state == Alarm.ArmingState.ARMED):
         yield SystemStatusEvent.EventType.EXIT_DELAY_END
 
     if state == Alarm.ArmingState.ENTRY_DELAY:
@@ -311,19 +311,19 @@ def get_arming_status(state: Alarm.ArmingState) -> List[ArmingUpdate.ArmingStatu
             ArmingUpdate.ArmingStatus.AREA_1_ARMED,
             ArmingUpdate.ArmingStatus.AREA_1_FULLY_ARMED,
         ]
-    elif state == Alarm.ArmingState.EXIT_DELAY:
+    if state == Alarm.ArmingState.EXIT_DELAY:
         return [ArmingUpdate.ArmingStatus.AREA_1_ARMED]
-    else:
-        return []
+
+    return []
 
 
 def toggled_state(state: Zone.State) -> Zone.State:
     if state == Zone.State.SEALED:
         return Zone.State.UNSEALED
-    else:
-        return Zone.State.SEALED
+
+    return Zone.State.SEALED
 
 
 def get_zone_for_id(zone_id: int) -> ZoneUpdate.Zone:
-    key = "ZONE_{}".format(zone_id)
+    key = f"ZONE_{zone_id}"
     return ZoneUpdate.Zone[key]
