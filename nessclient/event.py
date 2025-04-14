@@ -10,18 +10,43 @@ from .packet import CommandType, Packet
 T = TypeVar("T", bound=Enum)
 
 
-def unpack_unsigned_short_data_enum(packet: Packet, enum_type: type[T]) -> list[T]:
+def unpack_unsigned_short_data_enum(
+    packet: Packet, enum_bitfield_type: type[T]
+) -> list[T]:
+    """
+    Parse a bitfield from a 3 hex bytes of packet data.
+
+    Returns a list of the bitfield enum items present.
+    Used with bitfields of various StatusUpdate packet types
+    """
+    # Convert hex data to a byte array
     data = bytearray.fromhex(packet.data)
+
+    # Parse a big-endian 16-bit value from the second and third bytes
     (raw_data,) = struct.unpack(">H", data[1:3])
-    return [e for e in enum_type if e.value & raw_data]
+
+    # Identify which bitfield items are represented by the value
+    return [e for e in enum_bitfield_type if e.value & raw_data]
 
 
-def pack_unsigned_short_data_enum(items: list[T]) -> str:
+def pack_unsigned_short_data_enum(enum_bitfield_items: list[T]) -> str:
+    """
+    Construct hex packet data from a list of bitfield items.
+
+    Returns a 4-nibble hex value containing the bitfield enum items.
+    Performs the reverse of unpack_unsigned_short_data_enum().
+
+    Used with bitfields of various StatusUpdate packet types
+    """
+    # Construct an integer value containing all requested bitfield items
     value = 0
-    for item in items:
+    for item in enum_bitfield_items:
         value |= item.value
 
+    # Pack the value as a big-endian 16-bit byte array
     packed_value = struct.pack(">H", value)
+
+    # Convert byte array to hex ready for insertion into a packet
     return packed_value.hex()
 
 
@@ -38,7 +63,7 @@ class BaseEvent:
     timestamp: datetime.datetime | None
 
     def __init__(
-        self, address: int | None, timestamp: datetime.datetime | None
+        self, *, address: int | None, timestamp: datetime.datetime | None
     ) -> None:
         """
         Construct a BaseEvent object - used by subclass constructors.
@@ -91,6 +116,9 @@ class SystemStatusEvent(BaseEvent):
     SystemStatusEvent represents a 'System Status Event' received from the Ness alarm.
 
     These are asynchronous events indicating status changes.
+
+    These are defined in part "1. Output Event Data" of:
+    Ness D8x D16x Serial Interface - ASCII Protocol - v13
     """
 
     class EventType(Enum):
@@ -142,9 +170,46 @@ class SystemStatusEvent(BaseEvent):
     area: int
     sequence: bool
 
-    def __init__(
+    AREA_SEALED_USER_DOOR_1 = 0xA1
+    AREA_SEALED_USER_DOOR_2 = 0xA2
+    AREA_SEALED_USER_DOOR_3 = 0xA3
+    AREA_ALARM_ZONE_AREA_1 = 0x01
+    AREA_ALARM_ZONE_AREA_2 = 0x02
+    AREA_ALARM_ZONE_HOME = 0x03
+    AREA_ALARM_ZONE_DAY = 0x04
+    AREA_ALARM_ZONE_24HR = 0x80
+    AREA_ALARM_ZONE_FIRE = 0x81
+    AREA_ALARM_ZONE_DOOR = 0x85
+    AREA_ALARM_KEYPAD_FIRE = 0x81
+    AREA_ALARM_KEYPAD_PANIC = 0x82
+    AREA_ALARM_KEYPAD_MEDICAL = 0x83
+    AREA_ALARM_KEYPAD_DURESS = 0x84
+    # Manual/Auto Exclude Area codes not defined in spec
+    AREA_ALARM_USER_RADIO_PANIC = 0x82
+    AREA_ALARM_MAIN_KEYSWITCH_PANIC = 0x82
+    AREA_TAMPER_INTERNAL = 0x00
+    AREA_TAMPER_EXTERNAL = 0x01
+    AREA_TAMPER_RADIO_DETECTOR = 0x91
+    AREA_BATTERY_RADIO_KEY = 0x92
+    AREA_BATTERY_RADIO_DETECTOR = 0x92
+    AREA_DELAY_AREA_1 = 0x01
+    AREA_DELAY_AREA_2 = 0x02
+    AREA_DELAY_HOME = 0x03
+    AREA_ARMED_AWAY_AREA_1 = 0x01
+    AREA_ARMED_AWAY_AREA_2 = 0x02
+    AREA_ARMED_HOME_HOME = 0x03
+    AREA_ARMED_DAY_DAY = 0x04
+    AREA_DISARMED_AREA_1 = 0x01
+    AREA_DISARMED_AREA_2 = 0x02
+    AREA_DISARMED_HOME = 0x03
+    AREA_DISARMED_DAY = 0x04
+
+    ZONE_ID_VIOLATING_DECIMAL_ID = 0xF0
+
+    def __init__(  # noqa: PLR0913 # No easy way to reduce argument count
         self,
-        type: "SystemStatusEvent.EventType",
+        *,
+        event_type: "SystemStatusEvent.EventType",
         zone: int,
         area: int,
         address: int | None,
@@ -166,7 +231,7 @@ class SystemStatusEvent(BaseEvent):
                          with each message received message from the Ness alarm
         """
         super().__init__(address=address, timestamp=timestamp)
-        self.type = type
+        self.type = event_type
         self.zone = zone
         self.area = area
         self.sequence = sequence
@@ -192,13 +257,13 @@ class SystemStatusEvent(BaseEvent):
             SystemStatusEvent.EventType.TAMPER_NORMAL,
         ]:
             # These types violate the decimal ID field by having a
-            # hex 0xf0 value instead
+            # hex 0xf0 value instead of decimal
             zone = int(packet.data[2:4], 16)
         else:
             zone = int(packet.data[2:4])
         area = int(packet.data[4:6], 16)
         return SystemStatusEvent(
-            type=SystemStatusEvent.EventType(event_type),
+            event_type=SystemStatusEvent.EventType(event_type),
             zone=zone,
             area=area,
             timestamp=packet.timestamp,
@@ -217,14 +282,18 @@ class SystemStatusEvent(BaseEvent):
         :return: The :py:class:`Packet` object representing this
                  encoded :py:class:`SystemStatusEvent` object
         """
-        if self.zone == 0xF0 and SystemStatusEvent.EventType(self.type) in [
-            SystemStatusEvent.EventType.ALARM,
-            SystemStatusEvent.EventType.ALARM_RESTORE,
-            SystemStatusEvent.EventType.TAMPER_UNSEALED,
-            SystemStatusEvent.EventType.TAMPER_NORMAL,
-        ]:
+        if (
+            self.zone == SystemStatusEvent.ZONE_ID_VIOLATING_DECIMAL_ID
+            and SystemStatusEvent.EventType(self.type)
+            in [
+                SystemStatusEvent.EventType.ALARM,
+                SystemStatusEvent.EventType.ALARM_RESTORE,
+                SystemStatusEvent.EventType.TAMPER_UNSEALED,
+                SystemStatusEvent.EventType.TAMPER_NORMAL,
+            ]
+        ):
             # These types violate the decimal ID field by having a
-            # hex 0xf0 value instead
+            # hex 0xf0 value instead of decimal 15
             data = f"{self.type.value:02x}{self.zone:02x}{self.area:02x}"
         else:
             data = f"{self.type.value:02x}{self.zone:02d}{self.area:02x}"
@@ -289,7 +358,7 @@ class StatusUpdate(BaseEvent):
         self.request_id = request_id
 
     @classmethod
-    def decode(self, packet: Packet) -> "StatusUpdate":
+    def decode(cls, packet: Packet) -> "StatusUpdate":
         """
         Decode a :py:class:`Packet` received from the Ness alarm.
 
@@ -300,23 +369,26 @@ class StatusUpdate(BaseEvent):
         :return: The decode :py:class:`StatusUpdate` object
         """
         request_id = StatusUpdate.RequestID(int(packet.data[0:2]))
-        if request_id.name.startswith("ZONE"):
-            return ZoneUpdate.decode(packet)
-        if request_id == StatusUpdate.RequestID.MISCELLANEOUS_ALARMS:
-            return MiscellaneousAlarmsUpdate.decode(packet)
-        if request_id == StatusUpdate.RequestID.ARMING:
-            return ArmingUpdate.decode(packet)
-        if request_id == StatusUpdate.RequestID.OUTPUTS:
-            return OutputsUpdate.decode(packet)
-        if request_id == StatusUpdate.RequestID.VIEW_STATE:
-            return ViewStateUpdate.decode(packet)
-        if request_id == StatusUpdate.RequestID.PANEL_VERSION:
-            return PanelVersionUpdate.decode(packet)
-        if request_id == StatusUpdate.RequestID.AUXILIARY_OUTPUTS:
-            return AuxiliaryOutputsUpdate.decode(packet)
 
-        msg = f"Unhandled request_id case: {request_id}"
-        raise ValueError(msg)
+        update: StatusUpdate
+        if request_id.name.startswith("ZONE"):
+            update = ZoneUpdate.decode(packet)
+        elif request_id == StatusUpdate.RequestID.MISCELLANEOUS_ALARMS:
+            update = MiscellaneousAlarmsUpdate.decode(packet)
+        elif request_id == StatusUpdate.RequestID.ARMING:
+            update = ArmingUpdate.decode(packet)
+        elif request_id == StatusUpdate.RequestID.OUTPUTS:
+            update = OutputsUpdate.decode(packet)
+        elif request_id == StatusUpdate.RequestID.VIEW_STATE:
+            update = ViewStateUpdate.decode(packet)
+        elif request_id == StatusUpdate.RequestID.PANEL_VERSION:
+            update = PanelVersionUpdate.decode(packet)
+        elif request_id == StatusUpdate.RequestID.AUXILIARY_OUTPUTS:
+            update = AuxiliaryOutputsUpdate.decode(packet)
+        else:
+            msg = f"Unhandled request_id case: {request_id}"
+            raise ValueError(msg)
+        return update
 
     def encode(self) -> Packet:
         """
@@ -491,6 +563,8 @@ class MiscellaneousAlarmsUpdate(StatusUpdate):
     @classmethod
     def decode(cls, packet: Packet) -> "MiscellaneousAlarmsUpdate":
         """
+        Decode a Miscellaneous Alarms Update packet.
+
         Decode a :py:class:`Packet` received from the Ness alarm into
         a :py:class:`MiscellaneousAlarmsUpdate` object
         Used by :py:meth:`StatusUpdate.decode`
@@ -507,16 +581,20 @@ class MiscellaneousAlarmsUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        """Encodes this :py:class:`MiscellaneousAlarmsUpdate` object into
-        a :py:class:`Packet` object
+        """
+        Encode a Miscellaneous Alarms Update packet.
+
+        Encode this :py:class:`MiscellaneousAlarmsUpdate`
+        object into a :py:class:`Packet` object.
+
         Note: Primarily for testing and simulating a Ness alarm
 
         :return: The :py:class:`Packet` object representing this
                  encoded :py:class:`ZoneUpdate` object
         """
-        data = "{:02d}{}".format(
-            self.request_id.value,
-            pack_unsigned_short_data_enum(self.included_alarms),
+        data = (
+            f"{self.request_id.value:02d}"
+            f"{pack_unsigned_short_data_enum(self.included_alarms)}"
         )
         return Packet(
             address=self.address,
@@ -529,17 +607,20 @@ class MiscellaneousAlarmsUpdate(StatusUpdate):
 
 
 class ArmingUpdate(StatusUpdate):
-    """MiscellaneousAlarmsUpdate represents a MISCELLANEOUS_ALARMS type
-    'System Status Event' received from the Ness alarm.
+    """
+    Represents a ARMING 'System Status Event' received from the Ness alarm.
+
     These are synchronous response messages indicating arming mode status.
     """
 
     class ArmingStatus(Enum):
         """
-        This Bitfield represents the various armed states that
-        can be enabled in the Ness Alarm
+        An enumeration representing a 2 byte Arming Status bitfield.
+
+        This Bitfield represents the various armed states that can
+        be enabled in the Ness Alarm
         An enumeration representing a 2 byte Arming Status bitfield
-        Values listed in Form 21 of Ness D8x D16x Serial Interface - ASCII Protocol - v13
+        Values from Form 21 of Ness D8x D16x Serial Interface - ASCII Protocol - v13
         """
 
         AREA_1_ARMED = 0x0100
@@ -562,14 +643,16 @@ class ArmingUpdate(StatusUpdate):
         address: int | None,
         timestamp: datetime.datetime | None,
     ) -> None:
-        """Constructs a :py:class:`MiscellaneousAlarmsUpdate` object
+        """
+        Construct a :py:class:`ArmingUpdate` object.
+
         - used by :py:meth:`decode`
 
         :param status: A list of armed modes
         :param address: The address of the Ness alarm: 0x0 to 0xf  (default is 0x0)
         :param timestamp: Optional timestamp for the event
         """
-        super(ArmingUpdate, self).__init__(
+        super().__init__(
             request_id=StatusUpdate.RequestID.ARMING,
             address=address,
             timestamp=timestamp,
@@ -579,7 +662,10 @@ class ArmingUpdate(StatusUpdate):
 
     @classmethod
     def decode(cls, packet: Packet) -> "ArmingUpdate":
-        """Decode a :py:class:`Packet` received from the Ness alarm
+        """
+        Decode a received ArmingUpdate 'System Status Event' packet.
+
+        Decode a :py:class:`Packet` received from the Ness alarm
         into a :py:class:`ArmingUpdate` object
         Used by :py:meth:`StatusUpdate.decode`
 
@@ -593,16 +679,16 @@ class ArmingUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        """Encodes this :py:class:`ArmingUpdate` object into
-        a :py:class:`Packet` object
+        """
+        Encode this :py:class:`ArmingUpdate` object into a :py:class:`Packet` object.
+
         Note: Primarily for testing and simulating a Ness alarm
 
         :return: The :py:class:`Packet` object representing this
                  encoded :py:class:`ArmingUpdate` object
         """
-        data = "{:02d}{}".format(
-            self.request_id.value,
-            pack_unsigned_short_data_enum(self.status),
+        data = (
+            f"{self.request_id.value:02d}{pack_unsigned_short_data_enum(self.status)}"
         )
         return Packet(
             address=self.address,
@@ -615,16 +701,18 @@ class ArmingUpdate(StatusUpdate):
 
 
 class OutputsUpdate(StatusUpdate):
-    """OutputsUpdate represents a OUTPUTS type 'System Status Event'
-    received from the Ness alarm.
+    """
+    Represents an OUTPUTS 'System Status Event' received from the Ness alarm.
+
     These are synchronous response messages indicating current state of all outputs
     """
 
     class OutputType(Enum):
         """
-        This is a bitfield of all outputs from the Ness alarm.
+        An enumeration representing a 2 byte bitfield of all Outputs for the Ness alarm.
+
         An enumeration representing a 2 byte output state bitfield
-        Values listed in Form 22 of Ness D8x D16x Serial Interface - ASCII Protocol - v13
+        Values from Form 22 of Ness D8x D16x Serial Interface - ASCII Protocol - v13
         """
 
         SIREN_LOUD = 0x0100
@@ -652,13 +740,14 @@ class OutputsUpdate(StatusUpdate):
         address: int | None,
         timestamp: datetime.datetime | None,
     ) -> None:
-        """Constructs a :py:class:`OutputsUpdate` object - used by :py:meth:`decode`
+        """
+        Construct a :py:class:`OutputsUpdate` object - used by :py:meth:`decode`.
 
         :param outputs: A list of active outputs
         :param address: The address of the Ness alarm: 0x0 to 0xf  (default is 0x0)
         :param timestamp: Optional timestamp for the event
         """
-        super(OutputsUpdate, self).__init__(
+        super().__init__(
             request_id=StatusUpdate.RequestID.OUTPUTS,
             address=address,
             timestamp=timestamp,
@@ -667,8 +756,12 @@ class OutputsUpdate(StatusUpdate):
 
     @classmethod
     def decode(cls, packet: Packet) -> "OutputsUpdate":
-        """Decode a :py:class:`Packet` received from the Ness alarm into
-        a :py:class:`OutputsUpdate` object
+        """
+        Decode a received OutputsUpdate 'System Status Event' packet.
+
+        Decode a :py:class:`Packet` received from the Ness alarm
+        into a :py:class:`OutputsUpdate` object.
+
         Used by :py:meth:`StatusUpdate.decode`
 
         :param packet: The packet that is to be decoded
@@ -681,16 +774,16 @@ class OutputsUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        """Encodes this :py:class:`OutputsUpdate` object into
-        a :py:class:`Packet` object
+        """
+        Encode this :py:class:`OutputsUpdate` object into a :py:class:`Packet` object.
+
         Note: Primarily for testing and simulating a Ness alarm
 
         :return: The :py:class:`Packet` object representing this
                  encoded :py:class:`OutputsUpdate` object
         """
-        data = "{:02d}{}".format(
-            self.request_id.value,
-            pack_unsigned_short_data_enum(self.outputs),
+        data = (
+            f"{self.request_id.value:02d}{pack_unsigned_short_data_enum(self.outputs)}"
         )
         return Packet(
             address=self.address,
@@ -703,18 +796,21 @@ class OutputsUpdate(StatusUpdate):
 
 
 class ViewStateUpdate(StatusUpdate):
-    """OutputsUpdate represents a VIEW_STATE type 'System Status Event'
-    received from the Ness alarm.
+    """
+    Represents a VIEW_STATE type 'System Status Event' received from the Ness alarm.
+
     These are synchronous response messages indicating current
     'view state' that connected displays are in.
     """
 
     class State(Enum):
         """
+        An enumeration representing a 2 byte bitfield of View States of the Ness alarm.
+
         This enumeration represents the different modes ('view states') that a
         display connected to the Ness alarm might have.
         This 2 byte output is NOT a bitfield.
-        Values listed in Form 23 of Ness D8x D16x Serial Interface - ASCII Protocol - v13
+        Values from Form 23 of Ness D8x D16x Serial Interface - ASCII Protocol - v13
         """
 
         NORMAL = 0xF000
@@ -734,13 +830,14 @@ class ViewStateUpdate(StatusUpdate):
         address: int | None,
         timestamp: datetime.datetime | None,
     ) -> None:
-        """Constructs a :py:class:`ViewStateUpdate` object - used by :py:meth:`decode`
+        """
+        Construct a :py:class:`ViewStateUpdate` object - used by :py:meth:`decode`.
 
         :param state: The view state (current display mode)
         :param address: The address of the Ness alarm: 0x0 to 0xf  (default is 0x0)
         :param timestamp: Optional timestamp for the event
         """
-        super(ViewStateUpdate, self).__init__(
+        super().__init__(
             request_id=StatusUpdate.RequestID.VIEW_STATE,
             address=address,
             timestamp=timestamp,
@@ -749,8 +846,12 @@ class ViewStateUpdate(StatusUpdate):
 
     @classmethod
     def decode(cls, packet: Packet) -> "ViewStateUpdate":
-        """Decode a :py:class:`Packet` received from the Ness alarm into
-        a :py:class:`ViewStateUpdate` object
+        """
+        Decode a received VIEWS_TATE 'System Status Event' packet.
+
+        Decode a :py:class:`Packet` received from the Ness alarm into
+        a :py:class:`ViewStateUpdate` object.
+
         Used by :py:meth:`StatusUpdate.decode`
 
         :param packet: The packet that is to be decoded
@@ -764,14 +865,15 @@ class ViewStateUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        """Encodes this :py:class:`ViewStateUpdate` object into
-        a :py:class:`Packet` object
+        """
+        Encode this :py:class:`ViewStateUpdate` object into a :py:class:`Packet` object.
+
         Note: Primarily for testing and simulating a Ness alarm
 
         :return: The :py:class:`Packet` object representing this
                  encoded :py:class:`ViewStateUpdate` object
         """
-        data = "{:02d}{:04x}".format(self.request_id.value, self.state.value)
+        data = f"{self.request_id.value:02d}{self.state.value:04x}"
         return Packet(
             address=self.address,
             seq=0x00,
@@ -783,15 +885,17 @@ class ViewStateUpdate(StatusUpdate):
 
 
 class PanelVersionUpdate(StatusUpdate):
-    """PanelVersionUpdate represents a PANEL_VERSION type
-    'System Status Event' received from the Ness alarm.
+    """
+    Represents a PANEL_VERSION type 'System Status Event' received from the Ness alarm.
+
     These are synchronous response messages indicating Ness Alarm model
     and currently running firmware version.
     """
 
     class Model(Enum):
         """
-        Represents different Ness alarm models
+        Represents different Ness alarm models.
+
         Names & Values are as per Ness D8x D16x Serial Interface - ASCII Protocol - v13
 
         NOTE: D8X is not represented, but output 0x00
@@ -804,6 +908,9 @@ class PanelVersionUpdate(StatusUpdate):
     major_version: int
     minor_version: int
 
+    MIN_VERSION = 0x0
+    MAX_VERSION = 0xF
+
     def __init__(
         self,
         model: Model,
@@ -812,7 +919,8 @@ class PanelVersionUpdate(StatusUpdate):
         address: int | None,
         timestamp: datetime.datetime | None,
     ) -> None:
-        """Constructs a :py:class:`PanelVersionUpdate` object - used by :py:meth:`decode`
+        """
+        Construct a :py:class:`PanelVersionUpdate` object - used by :py:meth:`decode`.
 
         :param model: The Ness alarm model
         :param major_version: The major part of the firmware version number 0x0 to 0xf
@@ -820,30 +928,42 @@ class PanelVersionUpdate(StatusUpdate):
         :param address: The address of the Ness alarm: 0x0 to 0xf  (default is 0x0)
         :param timestamp: Optional timestamp for the event
         """
-        super(PanelVersionUpdate, self).__init__(
+        super().__init__(
             request_id=StatusUpdate.RequestID.PANEL_VERSION,
             address=address,
             timestamp=timestamp,
         )
 
         if model not in PanelVersionUpdate.Model:
-            raise ValueError("Invalid model")
-        if major_version < 0 or major_version > 0xF:
-            raise ValueError("Invalid major version")
-        if minor_version < 0 or minor_version > 0xF:
-            raise ValueError("Invalid minor version")
+            msg = "Invalid model"
+            raise ValueError(msg)
+        if (
+            major_version < PanelVersionUpdate.MIN_VERSION
+            or major_version > PanelVersionUpdate.MAX_VERSION
+        ):
+            msg = "Invalid major version"
+            raise ValueError(msg)
+        if (
+            minor_version < PanelVersionUpdate.MIN_VERSION
+            or minor_version > PanelVersionUpdate.MAX_VERSION
+        ):
+            msg = "Invalid minor version"
+            raise ValueError(msg)
         self.model = model
         self.major_version = major_version
         self.minor_version = minor_version
 
     @property
     def version(self) -> str:
-        """Creates a string representing the Ness alarm version number"""
-        return "{}.{}".format(self.major_version, self.minor_version)
+        """Create a string representing the Ness alarm version number."""
+        return f"{self.major_version}.{self.minor_version}"
 
     @classmethod
     def decode(cls, packet: Packet) -> "PanelVersionUpdate":
-        """Decode a :py:class:`Packet` received from the Ness alarm into
+        """
+        Decode a received PANEL_VERSION 'System Status Event' packet.
+
+        Decode a :py:class:`Packet` received from the Ness alarm into
         a :py:class:`PanelVersionUpdate` object
         Used by :py:meth:`StatusUpdate.decode`
 
@@ -862,18 +982,19 @@ class PanelVersionUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        """Encodes this :py:class:`PanelVersionUpdate` object into
+        """
+        Encode a PANEL_VERSION 'System Status Event' packet.
+
+        Encodes this :py:class:`PanelVersionUpdate` object into
         a :py:class:`Packet` object
         Note: Primarily for testing and simulating a Ness alarm
 
         :return: The :py:class:`Packet` object representing this
                  encoded :py:class:`PanelVersionUpdate` object
         """
-        data = "{:02d}{:02x}{:x}{:x}".format(
-            self.request_id.value,
-            self.model.value,
-            self.major_version,
-            self.minor_version,
+        data = (
+            f"{self.request_id.value:02d}{self.model.value:02x}"
+            f"{self.major_version:x}{self.minor_version:x}"
         )
         return Packet(
             address=self.address,
@@ -886,17 +1007,19 @@ class PanelVersionUpdate(StatusUpdate):
 
 
 class AuxiliaryOutputsUpdate(StatusUpdate):
-    """AuxiliaryOutputsUpdate represents a AUXILIARY_OUTPUTS
-    type 'System Status Event' received from the Ness alarm.
+    """
+    Represents a AUXILIARY_OUTPUTS 'System Status Event' received from the Ness alarm.
+
     These are synchronous response messages indicating
     current state of all auxillary outputs
     """
 
     class OutputType(Enum):
         """
-        This is a bitfield of all auxilliary outputs from the Ness alarm.
+        A bitfield of all auxilliary outputs from the Ness alarm.
+
         An enumeration representing a 2 byte output state bitfield
-        Values listed in Form 24 of Ness D8x D16x Serial Interface - ASCII Protocol - v13
+        Values from Form 24 of Ness D8x D16x Serial Interface - ASCII Protocol - v13
         """
 
         AUX_1 = 0x0001
@@ -916,14 +1039,16 @@ class AuxiliaryOutputsUpdate(StatusUpdate):
         address: int | None,
         timestamp: datetime.datetime | None,
     ) -> None:
-        """Constructs a :py:class:`AuxiliaryOutputsUpdate` object
+        """
+        Construct a :py:class:`AuxiliaryOutputsUpdate` object.
+
         - used by :py:meth:`decode`
 
         :param outputs: A list of the active auxilliary outputs
         :param address: The address of the Ness alarm: 0x0 to 0xf  (default is 0x0)
         :param timestamp: Optional timestamp for the event
         """
-        super(AuxiliaryOutputsUpdate, self).__init__(
+        super().__init__(
             request_id=StatusUpdate.RequestID.AUXILIARY_OUTPUTS,
             address=address,
             timestamp=timestamp,
@@ -931,13 +1056,17 @@ class AuxiliaryOutputsUpdate(StatusUpdate):
 
         for o in outputs:
             if o not in AuxiliaryOutputsUpdate.OutputType:
-                raise ValueError("Invalid aux output value")
+                msg = "Invalid aux output value"
+                raise ValueError(msg)
 
         self.outputs = outputs
 
     @classmethod
     def decode(cls, packet: Packet) -> "AuxiliaryOutputsUpdate":
-        """Decode a :py:class:`Packet` received from the Ness alarm into
+        """
+        Decode a received AUXILIARY_OUTPUTS 'System Status Event' packet.
+
+        Decode a :py:class:`Packet` received from the Ness alarm into
         a :py:class:`AuxiliaryOutputsUpdate` object
         Used by :py:meth:`StatusUpdate.decode`
 
@@ -953,16 +1082,18 @@ class AuxiliaryOutputsUpdate(StatusUpdate):
         )
 
     def encode(self) -> Packet:
-        """Encodes this :py:class:`AuxiliaryOutputsUpdate` object into
+        """
+        Encode a AUXILIARY_OUTPUTS 'System Status Event' packet.
+
+        Encodes this :py:class:`AuxiliaryOutputsUpdate` object into
         a :py:class:`Packet` object
         Note: Primarily for testing and simulating a Ness alarm
 
         :return: The :py:class:`Packet` object representing this
                  encoded :py:class:`AuxiliaryOutputsUpdate` object
         """
-        data = "{:02d}{}".format(
-            self.request_id.value,
-            pack_unsigned_short_data_enum(self.outputs),
+        data = (
+            f"{self.request_id.value:02d}{pack_unsigned_short_data_enum(self.outputs)}"
         )
         return Packet(
             address=self.address,

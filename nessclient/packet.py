@@ -78,6 +78,8 @@ def is_valid_ui_data_char(s: str) -> bool:
 
 @dataclass
 class Packet:
+    """Represents a generic Ness Serial protocol packet."""
+
     address: int | None
     seq: int
     command: CommandType
@@ -108,7 +110,7 @@ class Packet:
     # Whether or not this packet is a USER_INTERFACE response
     is_user_interface_resp: bool = False
 
-    def __init__(
+    def __init__(  # noqa: PLR0912, PLR0913, PLR0915 # Not easy to reduce complexity of this
         self,
         *,
         command: CommandType,
@@ -119,6 +121,13 @@ class Packet:
         is_user_interface_resp: bool = False,
         has_delay_marker: bool = False,
     ) -> None:
+        """
+        Create a packet object.
+
+        Users will call this to create a packet ready for encoding/sending.
+
+        Internally it is called by decode() to create the decoded packet.
+        """
         if command == CommandType.USER_INTERFACE:
             if is_user_interface_resp:
                 # Output (from Ness) Status Update Packet:
@@ -254,10 +263,21 @@ class Packet:
 
     @property
     def length_field(self) -> int:
+        """
+        Return LENGTH-byte for this packet.
+
+        The length byte is:
+            * Input-to-Ness UI Request - 1 to 30 (0x01 to 0x1e) inclusive
+            * Output-from-Ness UI Response - Always 0x03
+            * Output-from-Ness Asynchronous Event Data -
+                The length byte a combination of the sequence bit and the packet length
+                Always 0x03 or 0x83
+        """
         return int(self.length) | (self.seq << 7)
 
     @property
     def length(self) -> int:
+        """Return data length value for this packet."""
         if _is_user_interface_req(self.start, self.command):
             return len(self.data)
 
@@ -314,7 +334,7 @@ class Packet:
             data += self.timestamp.strftime("%y%m%d%H%M%S")
 
         if with_checksum:
-            checksum_str = "{self.checksum:02x}"
+            checksum_str = f"{self.checksum:02x}"
             if _is_user_interface_req(self.start, self.command):
                 # NOTE: Checksum for UI Input Request packets MUST be upper case
                 #       Otherwise packets will be ignored by NESS
@@ -327,7 +347,7 @@ class Packet:
         return data + "\r\n"
 
     @classmethod
-    def decode(cls, _data: str) -> "Packet":
+    def decode(cls, _data: str) -> "Packet":  # noqa: PLR0912, PLR0915 # Not easy to reduce complexity of this
         """
         Decode from a Ness Serial ASCII Protocol string into a Packet.
 
@@ -436,23 +456,22 @@ class Packet:
         data = DataIterator(_data)
         _LOGGER.debug("Decoding bytes: '%s'", _data)
 
-        start = data.take_hex()
+        start = data.take_byte_value()
 
         address = None
         if _has_address(start, len(_data)):
-            address = data.take_hex(half=is_input_ui_req)
+            address = data.take_byte_value(hex_format=not is_input_ui_req)
 
-        length = data.take_hex()
+        length = data.take_byte_value()
         data_length = length & 0x7F
         seq = length >> 7
-        command = CommandType(data.take_hex())
+        command = CommandType(data.take_byte_value())
         msg_data = data.take_bytes(data_length, hex_format=not is_input_ui_req)
         timestamp = None
         if bool(Packet.START_BYTE_TIMESTAMP_INCLUDED & start):
             timestamp = _decode_timestamp(data.take_bytes(6, hex_format=True))
 
-        # TODO(NW): Figure out checksum validation
-        checksum = data.take_hex()
+        _checksum = data.take_byte_value()  # Checksum has already been validated above
 
         if not data.is_consumed():
             msg = "Unable to consume all data"
@@ -483,6 +502,12 @@ class DataIterator:
         self._position = 0
 
     def take_bytes(self, n: int, *, hex_format: bool = False) -> str:
+        """
+        Take bytes from the buffer, advancing the read position.
+
+        If hex_format is specified, two bytes will be read for each
+        requested
+        """
         multi = 2 if hex_format else 1
         position = self._position
         self._position += n * multi
@@ -492,10 +517,12 @@ class DataIterator:
 
         return self._data[position : self._position]
 
-    def take_hex(self, *, half: bool = False) -> int:
-        return int(self.take_bytes(1, non_hex_format=half), 16)
+    def take_byte_value(self, *, hex_format: bool = True) -> int:
+        """Return an integer represented by 1 byte or 2 hex nibble characters."""
+        return int(self.take_bytes(1, hex_format=hex_format), 16)
 
     def is_consumed(self) -> bool:
+        """Return True if entire buffer has been read."""
         return self._position >= len(self._data)
 
 
@@ -541,12 +568,11 @@ def _decode_timestamp(data: str) -> datetime.datetime:
         minute = 0
         hour += 1
 
-    return datetime.datetime(
+    return datetime.datetime(  # noqa: DTZ001 - local timezone - No function available
         year=year,
         month=month,
         day=day,
         hour=hour,
         minute=minute,
         second=second,
-        tzinfo=datetime.UTC,
     )

@@ -19,7 +19,7 @@ logging.basicConfig(
 @click.option("--serial", type=str, default=None)
 @click.argument("command")
 def send_command(host: str, port: int, serial: str, command: str) -> None:
-    _LOGGER.debug(f"send_command {host} {port} {serial} {command}")
+    _LOGGER.debug("send_command %s %s %s %s", host, port, serial, command)
     loop = asyncio.get_event_loop()
     client = Client(host=host, port=port, serial_tty=serial)
 

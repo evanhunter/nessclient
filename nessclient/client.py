@@ -1,68 +1,26 @@
+"""Provides the user API for communicating with a NESS alarm."""
+
 import asyncio
 import datetime
 import logging
 from asyncio import CancelledError, sleep
 from collections.abc import Callable
-from dataclasses import dataclass
-from enum import Enum
-from typing import cast
 
 from justbackoff import Backoff
 
-from .alarm import Alarm, ArmingMode, ArmingState, ZoneSealedState
+from .alarm import Alarm, ArmingMode, ArmingState
 from .connection import Connection, IP232Connection, Serial232Connection
 from .event import (
-    ArmingUpdate,
-    AuxiliaryOutputsUpdate,
     BaseEvent,
-    MiscellaneousAlarmsUpdate,
-    OutputsUpdate,
-    PanelVersionUpdate,
     StatusUpdate,
-    ViewStateUpdate,
-    ZoneUpdate,
 )
 from .packet import CommandType, Packet
 
 _LOGGER = logging.getLogger(__name__)
 
 
-@dataclass
-class ZoneStatus:
-    InputUnsealed: bool
-    RadioUnsealed: bool
-    CbusUnsealed: bool
-    InDelay: bool
-    InDoubleTrigger: bool
-    InAlarm: bool
-    Excluded: bool
-    AutoExcluded: bool
-    SupervisionFailPending: bool
-    SupervsionFail: bool
-    DoorsOpen: bool
-    DetectorLowBattery: bool
-    DetectorTamper: bool
-
-
-@dataclass
-class AllStatus:
-    Zones: list[ZoneStatus]
-    MiscellaneousAlarms: MiscellaneousAlarmsUpdate | None
-    Arming: ArmingUpdate | None
-    Outputs: OutputsUpdate | None
-    ViewState: ViewStateUpdate | None
-    PanelVersion: PanelVersionUpdate | None
-    AuxiliaryOutputs: AuxiliaryOutputsUpdate | None
-
-
 class Client:
-    """
-    :param update_interval: Frequency (in seconds) to trigger a full state
-        refresh
-    :param infer_arming_state: Infer the `DISARMED` arming state only via
-        system status events. This works around a bug with some panels
-        (`<v5.8`) which emit `update.status = []` when they are armed.
-    """
+    """Main class that contains the user API for communicating with a NESS alarm."""
 
     connected_count: int
     bad_received_packets: int
@@ -83,14 +41,12 @@ class Client:
 
     DELAY_SECONDS_BETWEEN_SENDS = 0.2
 
-    class AuxState(Enum):
-        """Auxiliary output states - either active or inactive."""
+    USER_INTERFACE_REQUEST_STATUS_UPDATE_DATA_SIZE = 3
+    USER_INTERFACE_STATUS_UPDATE_MAX_ID = 18
 
-        INACTIVE = False
-        ACTIVE = True
-
-    def __init__(
+    def __init__(  # noqa: PLR0913 # Cannot easily reduce argument count on public API
         self,
+        *,
         connection: Connection | None = None,
         host: str | None = None,
         port: int | None = None,
@@ -98,7 +54,18 @@ class Client:
         update_interval: int = 60,
         infer_arming_state: bool = False,
         alarm: Alarm | None = None,
-    ):
+    ) -> None:
+        """
+        Create a Ness Client for a specific NESS alarm device.
+
+        Uses specified communicationsconnction details.
+
+        :param update_interval: Frequency (in seconds) to trigger a full state
+            refresh
+        :param infer_arming_state: Infer the `DISARMED` arming state only via
+            system status events. This works around a bug with some panels
+            (`<v5.8`) which emit `update.status = []` when they are armed.
+        """
         if connection is None:
             if host is not None and port is not None:
                 connection = IP232Connection(host=host, port=port)
@@ -197,7 +164,7 @@ class Client:
         command = "ME"
         return await self.send_command(command)
 
-    async def aux(self, output_id: int, state: AuxState = AuxState.ACTIVE) -> None:
+    async def aux(self, output_id: int, *, state: bool = True) -> None:
         """
         Set one of the auxilliary outputs.
 
@@ -212,218 +179,28 @@ class Client:
         """Force update of alarm status and zones."""
         _LOGGER.debug("Requesting state update from server (S00, S05, S14)")
         await asyncio.gather(
-            # List unsealed Zones
+            # S00 : List unsealed Zones
             self.send_command("S00"),
-            # List Zones currently Alarming
+            # S01 : List radio unsealed zones
+            # S02 : List Cbus unsealed zones
+            # S03 : List zones in delay
+            # S04 : List zones in double trigger
+            # S05 : List zones currently Alarming
             self.send_command("S05"),
-            # Arming status update
+            # S06 : List excluded zones
+            # S07 : List auto-excluded zones
+            # S08 : List zones with supervision-fail pending
+            # S09 : List zones with supervision-fail
+            # S10 : List zones with doors open
+            # S11 : List zones with detector low battery
+            # S12 : List zones with detector tamper
+            # S13 : List miscellaneous alarms
+            # S14 : Arming status update
             self.send_command("S14"),
-            # List unsealed Zones
-            # self.send_command("S00"),
-            # self.send_command("S01"),
-            # self.send_command("S02"),
-            # self.send_command("S03"),
-            # self.send_command("S04"),
-            # self.send_command("S05"),
-            # self.send_command("S06"),
-            # self.send_command("S07"),
-            # self.send_command("S08"),
-            # self.send_command("S09"),
-            # self.send_command("S10"),
-            # self.send_command("S11"),
-            # self.send_command("S12"),
-            # self.send_command("S13"),
-            # self.send_command("S14"),
-            # self.send_command("S15"),
-            # self.send_command("S16"),
-            # self.send_command("S17"),
-            # self.send_command("S18"),
-            # Arming status update
-            # self.send_command("S14"),
-        )
-
-    async def update_wait(self) -> (list[bool],):
-        """Force update of ZoneInputUnsealed status and Arming Status"""
-        _LOGGER.debug("Requesting state update from server (S00, S14)")
-        (
-            zone_input_unsealed,
-            arming,
-        ) = await asyncio.gather(
-            # List unsealed Zones
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.ZONE_INPUT_UNSEALED
-            ),
-            self.request_and_wait_status_update(StatusUpdate.RequestID.ARMING),
-        )
-        zones: list[ZoneStatus] = []
-        for z in ZoneUpdate.Zone:
-            zones.append(
-                ZoneStatus(
-                    InputUnsealed=zone_input_unsealed is not None
-                    and (z in cast(ZoneUpdate, zone_input_unsealed).included_zones),
-                    RadioUnsealed=zone_radio_unsealed is not None
-                    and (z in cast(ZoneUpdate, zone_radio_unsealed).included_zones),
-                    CbusUnsealed=zone_cbus_unsealed is not None
-                    and (z in cast(ZoneUpdate, zone_cbus_unsealed).included_zones),
-                    InDelay=zone_radio_unsealed is not None
-                    and (z in cast(ZoneUpdate, zone_in_delay).included_zones),
-                    InDoubleTrigger=zone_in_double_trigger is not None
-                    and (z in cast(ZoneUpdate, zone_in_double_trigger).included_zones),
-                    InAlarm=zone_in_alarm is not None
-                    and (z in cast(ZoneUpdate, zone_in_alarm).included_zones),
-                    Excluded=zone_excluded is not None
-                    and (z in cast(ZoneUpdate, zone_excluded).included_zones),
-                    AutoExcluded=zone_auto_excluded is not None
-                    and (z in cast(ZoneUpdate, zone_auto_excluded).included_zones),
-                    SupervisionFailPending=zone_supervision_fail_pending is not None
-                    and (
-                        z
-                        in cast(
-                            ZoneUpdate, zone_supervision_fail_pending
-                        ).included_zones
-                    ),
-                    SupervsionFail=zone_supervision_fail is not None
-                    and (z in cast(ZoneUpdate, zone_supervision_fail).included_zones),
-                    DoorsOpen=zone_doors_open is not None
-                    and (z in cast(ZoneUpdate, zone_doors_open).included_zones),
-                    DetectorLowBattery=zone_detector_low_battery is not None
-                    and (
-                        z in cast(ZoneUpdate, zone_detector_low_battery).included_zones
-                    ),
-                    DetectorTamper=zone_detector_tamper is not None
-                    and (z in cast(ZoneUpdate, zone_detector_tamper).included_zones),
-                )
-            )
-
-        return AllStatus(
-            Zones=zones,
-            MiscellaneousAlarms=cast(
-                MiscellaneousAlarmsUpdate | None, miscellaneous_alarms
-            ),
-            Arming=cast(ArmingUpdate | None, arming),
-            Outputs=cast(OutputsUpdate | None, outputs),
-            ViewState=cast(ViewStateUpdate | None, view_state),
-            PanelVersion=cast(PanelVersionUpdate | None, panel_version),
-            AuxiliaryOutputs=cast(AuxiliaryOutputsUpdate | None, auxiliary_outputs),
-        )
-
-    async def update_all_wait(self) -> AllStatus:
-        """Force update of alarm status and zones"""
-        _LOGGER.debug("Requesting state update from server (S00, S14)")
-        (
-            zone_input_unsealed,
-            zone_radio_unsealed,
-            zone_cbus_unsealed,
-            zone_in_delay,
-            zone_in_double_trigger,
-            zone_in_alarm,
-            zone_excluded,
-            zone_auto_excluded,
-            zone_supervision_fail_pending,
-            zone_supervision_fail,
-            zone_doors_open,
-            zone_detector_low_battery,
-            zone_detector_tamper,
-            miscellaneous_alarms,
-            arming,
-            outputs,
-            view_state,
-            panel_version,
-            auxiliary_outputs,
-        ) = await asyncio.gather(
-            # List unsealed Zones
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.ZONE_INPUT_UNSEALED
-            ),
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.ZONE_RADIO_UNSEALED
-            ),
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.ZONE_CBUS_UNSEALED
-            ),
-            self.request_and_wait_status_update(StatusUpdate.RequestID.ZONE_IN_DELAY),
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.ZONE_IN_DOUBLE_TRIGGER
-            ),
-            self.request_and_wait_status_update(StatusUpdate.RequestID.ZONE_IN_ALARM),
-            self.request_and_wait_status_update(StatusUpdate.RequestID.ZONE_EXCLUDED),
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.ZONE_AUTO_EXCLUDED
-            ),
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.ZONE_SUPERVISION_FAIL_PENDING
-            ),
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.ZONE_SUPERVISION_FAIL
-            ),
-            self.request_and_wait_status_update(StatusUpdate.RequestID.ZONE_DOORS_OPEN),
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.ZONE_DETECTOR_LOW_BATTERY
-            ),
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.ZONE_DETECTOR_TAMPER
-            ),
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.MISCELLANEOUS_ALARMS
-            ),
-            self.request_and_wait_status_update(StatusUpdate.RequestID.ARMING),
-            self.request_and_wait_status_update(StatusUpdate.RequestID.OUTPUTS),
-            self.request_and_wait_status_update(StatusUpdate.RequestID.VIEW_STATE),
-            self.request_and_wait_status_update(StatusUpdate.RequestID.PANEL_VERSION),
-            self.request_and_wait_status_update(
-                StatusUpdate.RequestID.AUXILIARY_OUTPUTS
-            ),
-        )
-        zones: list[ZoneStatus] = []
-        for z in ZoneUpdate.Zone:
-            zones.append(
-                ZoneStatus(
-                    InputUnsealed=zone_input_unsealed is not None
-                    and (z in cast(ZoneUpdate, zone_input_unsealed).included_zones),
-                    RadioUnsealed=zone_radio_unsealed is not None
-                    and (z in cast(ZoneUpdate, zone_radio_unsealed).included_zones),
-                    CbusUnsealed=zone_cbus_unsealed is not None
-                    and (z in cast(ZoneUpdate, zone_cbus_unsealed).included_zones),
-                    InDelay=zone_radio_unsealed is not None
-                    and (z in cast(ZoneUpdate, zone_in_delay).included_zones),
-                    InDoubleTrigger=zone_in_double_trigger is not None
-                    and (z in cast(ZoneUpdate, zone_in_double_trigger).included_zones),
-                    InAlarm=zone_in_alarm is not None
-                    and (z in cast(ZoneUpdate, zone_in_alarm).included_zones),
-                    Excluded=zone_excluded is not None
-                    and (z in cast(ZoneUpdate, zone_excluded).included_zones),
-                    AutoExcluded=zone_auto_excluded is not None
-                    and (z in cast(ZoneUpdate, zone_auto_excluded).included_zones),
-                    SupervisionFailPending=zone_supervision_fail_pending is not None
-                    and (
-                        z
-                        in cast(
-                            ZoneUpdate, zone_supervision_fail_pending
-                        ).included_zones
-                    ),
-                    SupervsionFail=zone_supervision_fail is not None
-                    and (z in cast(ZoneUpdate, zone_supervision_fail).included_zones),
-                    DoorsOpen=zone_doors_open is not None
-                    and (z in cast(ZoneUpdate, zone_doors_open).included_zones),
-                    DetectorLowBattery=zone_detector_low_battery is not None
-                    and (
-                        z in cast(ZoneUpdate, zone_detector_low_battery).included_zones
-                    ),
-                    DetectorTamper=zone_detector_tamper is not None
-                    and (z in cast(ZoneUpdate, zone_detector_tamper).included_zones),
-                )
-            )
-
-        return AllStatus(
-            Zones=zones,
-            MiscellaneousAlarms=cast(
-                MiscellaneousAlarmsUpdate | None, miscellaneous_alarms
-            ),
-            Arming=cast(ArmingUpdate | None, arming),
-            Outputs=cast(OutputsUpdate | None, outputs),
-            ViewState=cast(ViewStateUpdate | None, view_state),
-            PanelVersion=cast(PanelVersionUpdate | None, panel_version),
-            AuxiliaryOutputs=cast(AuxiliaryOutputsUpdate | None, auxiliary_outputs),
+            # S15 : List output states
+            # S16 : Get View State
+            # S17 : Get Firmware Version
+            # S18 : List auxilliary output states
         )
 
     async def _connect(self) -> None:
@@ -433,14 +210,14 @@ class Client:
                 _LOGGER.debug("_connect() - Closing stale connection and reconnecting")
                 await self._connection.close()
 
-            # was_closed = self._connection.connected
             while not self._connection.connected:
                 _LOGGER.debug("_connect() - Attempting to connect")
                 try:
                     await self._connection.connect()
                     self.connected_count += 1
                     _LOGGER.debug("_connect() - connected")
-                    self._last_recv = datetime.datetime.now(tz=datetime.UTC)
+                    self._last_recv = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
+
                 except (ConnectionRefusedError, OSError) as e:
                     _LOGGER.warning(
                         "Failed to connect: %s - sleeping backoff %s",
@@ -462,7 +239,14 @@ class Client:
         address: int = 0,
         finished_future: asyncio.Future[StatusUpdate] | None = None,
     ) -> None:
-        # Input Commands must use:
+        """
+        Send a command to the NESS alarm.
+
+        Commands are strings containing either
+        * Keypad entry sequences
+        * Status update requests
+        """
+        # The spec requires thtatInput Commands must use:
         # Start byte: 0x83
         # Command byte: 0x60
         # One-character Address only (different to Output Commands)
@@ -470,7 +254,6 @@ class Client:
         #
         packet = Packet(
             address=address & 0xF,
-            seq=0x00,  # TODO: sequence should be alternating
             command=CommandType.USER_INTERFACE,
             data=command,
             timestamp=None,
@@ -479,10 +262,10 @@ class Client:
 
         # Check if this is a Status Update Request
         is_status_request = (
-            (len(command) == 3)
+            (len(command) == Client.USER_INTERFACE_REQUEST_STATUS_UPDATE_DATA_SIZE)
             and (command[0] == "S")
             and (command[1:].isnumeric())
-            and (int(command[1:]) <= 18)
+            and (int(command[1:]) <= Client.USER_INTERFACE_STATUS_UPDATE_MAX_ID)
         )
         if is_status_request and finished_future is not None:
             # Look up list of existing requests awaiting responses
@@ -492,7 +275,7 @@ class Client:
                 _LOGGER.debug("cancelling existing %s", current)
                 current.cancel()
             _LOGGER.debug(
-                "send_command Adding future %S for %s", finished_future, req_id
+                "send_command Adding future %s for %s", finished_future, req_id
             )
             self._requests_awaiting_response[req_id] = finished_future
             _LOGGER.debug(
@@ -505,7 +288,7 @@ class Client:
             payload = packet.encode()
 
             # Check if a delay is needed to avoid overwhelming the Ness Alarm
-            now = datetime.datetime.now(tz=datetime.UTC)
+            now = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
             if self._last_sent_time is not None:
                 time_since_last_send_delta: datetime.timedelta = (
                     now - self._last_sent_time
@@ -518,7 +301,7 @@ class Client:
                     )
                     _LOGGER.debug("sleeping for %s seconds from %s", sleep_time, now)
                     await asyncio.sleep(sleep_time)
-                    now = datetime.datetime.now(tz=datetime.UTC)
+                    now = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
                     _LOGGER.debug("time after sleep %s", now)
 
             _LOGGER.debug("Sending packet: %s", packet)
@@ -543,7 +326,7 @@ class Client:
                 _LOGGER.debug("Finished waiting for status response: %s", f)
                 if f.done():
                     return f.result()
-            except (TimeoutError, CancelledError):
+            except (asyncio.exceptions.TimeoutError, CancelledError):
                 _LOGGER.warning(
                     "Timed out waiting for response to Status Request: %s", req_id
                 )
@@ -556,7 +339,7 @@ class Client:
 
         return None
 
-    async def _recv_loop(self) -> None:
+    async def _recv_loop(self) -> None:  # noqa: PLR0912 # No easy way to reduce branch count
         while not self._closed:
             _LOGGER.debug("_recv_loop() - connecting - closed=%s", self._closed)
             await self._connect()
@@ -571,7 +354,7 @@ class Client:
                     _LOGGER.debug("Received None data from connection.read()")
                     break
 
-                self._last_recv = datetime.datetime.now(tz=datetime.UTC)
+                self._last_recv = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
                 try:
                     decoded_data = data.decode("ascii")
                 except UnicodeDecodeError:
@@ -584,9 +367,12 @@ class Client:
                     try:
                         pkt = Packet.decode(decoded_data)
                         event = BaseEvent.decode(pkt)
-                    except Exception:
+                    except ValueError:
                         self.bad_received_packets += 1
                         _LOGGER.warning("Failed to decode packet", exc_info=True)
+                        continue
+                    except RuntimeError:
+                        _LOGGER.exception("Error whilst decoding packet")
                         continue
 
                     _LOGGER.debug("Decoded event: %s", event)
@@ -614,13 +400,10 @@ class Client:
                     self.alarm.handle_event(event)
 
     def _should_reconnect(self) -> bool:
-        now = datetime.datetime.now(tz=datetime.UTC)
+        now = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
         _LOGGER.debug("now=%s last_recv=%s", now, self._last_recv)
-        return (
-            self._last_recv is not None
-            and self._last_recv
-            < now - datetime.timedelta(seconds=self._update_interval + 30)
-        )
+        reconnect_time = now - datetime.timedelta(seconds=self._update_interval + 30)
+        return self._last_recv is not None and self._last_recv < reconnect_time
 
     async def _update_loop(self) -> None:
         """Schedule a state update to keep the connection alive."""
@@ -632,6 +415,11 @@ class Client:
             await asyncio.sleep(self._update_interval)
 
     async def keepalive(self) -> None:
+        """
+        Run the long-running receive and update loops.
+
+        This will run until Client.close() or asyncio_task.cancel() is called.
+        """
         _LOGGER.debug("keepalive start")
         await asyncio.gather(
             self._recv_loop(),
@@ -640,6 +428,11 @@ class Client:
         _LOGGER.debug("keepalive end")
 
     async def close(self) -> None:
+        """
+        Stop the nessclient.
+
+        Closes comms connection and stops receive and update loops.
+        """
         _LOGGER.debug("Closing Client")
         self._closed = True
         await self._connection.close()
@@ -647,17 +440,32 @@ class Client:
     def on_state_change(
         self, f: Callable[[ArmingState, ArmingMode | None], None] | None
     ) -> Callable[[ArmingState, ArmingMode | None], None] | None:
+        """
+        Provide a decorator @client.on_state_change for alarm state-change handlers.
+
+        Can also be called directly to set the state-change handler
+        """
         self.alarm.on_state_change(f)
         return f
 
     def on_zone_change(
-        self, f: Callable[[int, ZoneSealedState], None] | None
-    ) -> Callable[[int, ZoneSealedState], None] | None:
+        self, f: Callable[[int, bool], None] | None
+    ) -> Callable[[int, bool], None] | None:
+        """
+        Provide a decorator @client.on_zone_change for alarm zone-sealed handlers.
+
+        Can also be called directly to set the zone-sealed handler
+        """
         self.alarm.on_zone_change(f)
         return f
 
     def on_event_received(
         self, f: Callable[[BaseEvent], None] | None
     ) -> Callable[[BaseEvent], None] | None:
+        """
+        Provide a decorator @client.on_event_received for alarm general event handler.
+
+        Can also be called directly to set the general event handler
+        """
         self._on_event_received = f
         return f

@@ -1,3 +1,5 @@
+"""Example of using nessclient to send commands to a NESS alarm device."""
+
 import asyncio
 
 from nessclient import Client
@@ -7,6 +9,7 @@ port = 65432
 
 
 def main() -> None:
+    """Send various example commands then exits."""
     loop = asyncio.get_event_loop()
     client = Client(host=host, port=port)
 

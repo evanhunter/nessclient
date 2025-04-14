@@ -91,7 +91,9 @@ class AsyncIoConnection(Connection):
 
         :return: The bytes received - or None if an error occurred
         """
-        assert self._reader is not None
+        if self._reader is None:
+            _LOGGER.error("Attempt to read with invalid reader")
+            return None
 
         try:
             data = await self._reader.readuntil(b"\n")
@@ -116,7 +118,10 @@ class AsyncIoConnection(Connection):
         _LOGGER.debug("Waiting for write_lock to write data: %s", data)
         async with self._write_lock:
             _LOGGER.debug("Obtained write_lock to write data: %s", data)
-            assert self._writer is not None
+
+            if self._writer is None:
+                _LOGGER.error("Attempt to write with invalid writer")
+                return
 
             self._writer.write(data)
             await self._writer.drain()
@@ -176,7 +181,7 @@ class Serial232Connection(AsyncIoConnection):
     device or simulated-device-server
     """
 
-    def __init__(self, tty_path: str):
+    def __init__(self, tty_path: str) -> None:
         """
         Construct and initialises the Serial232Connection object.
 
@@ -197,7 +202,7 @@ class Serial232Connection(AsyncIoConnection):
         return (
             super().connected
             and self._serial_connection is not None
-            and self._serial_connection.isOpen()
+            and self._serial_connection.isOpen()  # type: ignore[attr-defined] # isOpen exists in SerialBase
         )
 
     async def connect(self) -> bool:
@@ -226,4 +231,4 @@ class Serial232Connection(AsyncIoConnection):
         self._serial_connection = transport.serial
         self._writer = asyncio.StreamWriter(transport, protocol, self._reader, loop)
 
-        return self._serial_connection.isOpen()
+        return self._serial_connection.isOpen()  # type: ignore[attr-defined] # isOpen exists in SerialBase

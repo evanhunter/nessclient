@@ -1,5 +1,4 @@
 import asyncio
-from typing import Optional
 
 import click
 
@@ -16,6 +15,7 @@ from .server import DEFAULT_PORT
 @click.option("--update-interval", type=int, default=60)
 @click.option("--infer-arming-state/--no-infer-arming-state")
 def events(
+    *,
     host: str | None,
     port: int | None,
     serial: str | None,
@@ -35,7 +35,7 @@ def events(
     )
 
     @client.on_zone_change
-    def on_zone_change(zone: int, triggered: Alarm.Zone.ZoneSealedState) -> None:
+    def on_zone_change(zone: int, triggered: bool) -> None:
         print(f"Zone {zone} changed to {triggered}")
 
     @client.on_state_change

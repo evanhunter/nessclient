@@ -1,5 +1,8 @@
+"""Module file for a test alarm emulator with an interactive CLI UI."""
+
 import click
 
+from .alarm import Alarm
 from .alarm_server import AlarmServer
 
 DEFAULT_PORT = 65432

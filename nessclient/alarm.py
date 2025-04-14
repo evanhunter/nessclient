@@ -1,9 +1,10 @@
+"""Provides an in-memory representation of the state of the NESS alarm device."""
+
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
-from .alarm import Alarm
 from .event import ArmingUpdate, BaseEvent, SystemStatusEvent, ZoneUpdate
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,9 +57,10 @@ class Alarm:
     class Zone:
         """Represents the current sealed state for an alarm zone."""
 
-        triggered: ZoneSealedState | None
+        triggered: bool | None
 
-    def __init__(self, infer_arming_state: bool = False) -> None:
+    def __init__(self, *, infer_arming_state: bool = False) -> None:
+        """Create a new Alarm instance."""
         self._infer_arming_state = infer_arming_state
         self.arming_state: ArmingState = ArmingState.UNKNOWN
         self.zones: list[Alarm.Zone] = [Alarm.Zone(triggered=None) for _ in range(16)]
@@ -69,7 +71,7 @@ class Alarm:
             Callable[[ArmingState, ArmingMode | None], None] | None
         ) = None
 
-        self._on_zone_change: Callable[[int, ZoneSealedState], None] | None = None
+        self._on_zone_change: Callable[[int, bool], None] | None = None
 
     def handle_event(self, event: BaseEvent) -> None:
         """
@@ -123,7 +125,7 @@ class Alarm:
             # only be reverted to disarmed via a system status event.
             # This works around a bug with some panels (<v5.8) which emit
             # update.status = [] when they are armed.
-            # TODO(NW): It would be ideal to find a better way to
+            # TODO(NW): It would be ideal to find a better way to  # noqa: FIX002, TD003
             #  query this information on-demand, but for now this should
             #  resolve the issue.
             if self.arming_state == ArmingState.UNKNOWN:
@@ -136,8 +138,8 @@ class Alarm:
             # in the arming update status as per the documentation.
             # Note: This may not be correct and may not correctly represent
             # other modes of arming other than ARMED_AWAY.
-            # TODO(NW): Perform some testing to determine how the client
-            #  handles other arming modes.
+            # TODO(NW): Perform some testing to determine how the # noqa: FIX002, TD003
+            #  client handles other arming modes.
             self._update_arming_state(ArmingState.DISARMED)
 
     def _handle_zone_input_update(self, update: ZoneUpdate) -> None:
@@ -146,9 +148,9 @@ class Alarm:
             zone_id = i + 1
             name = f"ZONE_{zone_id}"
             if ZoneUpdate.Zone[name] in update.included_zones:
-                self._update_zone(zone_id, ZoneSealedState.UNSEALED)
+                self._update_zone(zone_id=zone_id, state=True)
             else:
-                self._update_zone(zone_id, ZoneSealedState.SEALED)
+                self._update_zone(zone_id=zone_id, state=False)
 
     def _handle_zone_alarm_update(self, update: ZoneUpdate) -> None:
         _LOGGER.debug("Handling Zone Alarm ZoneUpdate - update: %s", update)
@@ -164,7 +166,7 @@ class Alarm:
         if self.arming_state == ArmingState.TRIGGERED:
             self._update_arming_state(ArmingState.UNKNOWN)
 
-    def _handle_system_status_event(self, event: SystemStatusEvent) -> None:
+    def _handle_system_status_event(self, event: SystemStatusEvent) -> None:  # noqa: PLR0912 # No easy way to reduce branching
         """
         Handle a system status event received from the Ness Alarm.
 
@@ -186,9 +188,9 @@ class Alarm:
         )
 
         if event.type == SystemStatusEvent.EventType.UNSEALED:
-            self._update_zone(event.zone, ZoneSealedState.UNSEALED)
+            self._update_zone(zone_id=event.zone, state=True)
         elif event.type == SystemStatusEvent.EventType.SEALED:
-            self._update_zone(event.zone, ZoneSealedState.SEALED)
+            self._update_zone(zone_id=event.zone, state=False)
         elif event.type == SystemStatusEvent.EventType.ALARM:
             self._update_arming_state(ArmingState.TRIGGERED)
         elif event.type == SystemStatusEvent.EventType.ALARM_RESTORE:
@@ -224,7 +226,7 @@ class Alarm:
             if self._on_state_change is not None:
                 self._on_state_change(state, self._arming_mode)
 
-    def _update_zone(self, zone_id: int, state: ZoneSealedState) -> None:
+    def _update_zone(self, *, zone_id: int, state: bool) -> None:
         zone = self.zones[zone_id - 1]
         if zone.triggered != state:
             zone.triggered = state
@@ -237,6 +239,6 @@ class Alarm:
         """Set the callback that receives Arming state/mode updates."""
         self._on_state_change = f
 
-    def on_zone_change(self, f: Callable[[int, ZoneSealedState], None] | None) -> None:
+    def on_zone_change(self, f: Callable[[int, bool], None] | None) -> None:
         """Set the callback that receives Zone sealed/unsealed updates."""
         self._on_zone_change = f
