@@ -144,13 +144,13 @@ class Alarm:
 
     def _handle_zone_input_update(self, update: ZoneUpdate) -> None:
         """Handle Zone Unsealed updates."""
+        _LOGGER.debug("Handling Zone Input Update - update: %s", update)
         for i in range(len(self.zones)):
             zone_id = i + 1
             name = f"ZONE_{zone_id}"
-            if ZoneUpdate.Zone[name] in update.included_zones:
-                self._update_zone(zone_id=zone_id, state=True)
-            else:
-                self._update_zone(zone_id=zone_id, state=False)
+            zone_state = ZoneUpdate.Zone[name] in update.included_zones
+            _LOGGER.debug("Zone update id:%s state:%s", zone_id, zone_state)
+            self._update_zone(zone_id=zone_id, state=zone_state)
 
     def _handle_zone_alarm_update(self, update: ZoneUpdate) -> None:
         _LOGGER.debug("Handling Zone Alarm ZoneUpdate - update: %s", update)
@@ -229,6 +229,7 @@ class Alarm:
     def _update_zone(self, *, zone_id: int, state: bool) -> None:
         zone = self.zones[zone_id - 1]
         if zone.triggered != state:
+            _LOGGER.debug("Zone %s change state:%s->%s", zone_id, zone.triggered, state)
             zone.triggered = state
             if self._on_zone_change is not None:
                 self._on_zone_change(zone_id, state)

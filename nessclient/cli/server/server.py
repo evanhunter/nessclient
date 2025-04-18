@@ -97,7 +97,7 @@ class Server:
         """Write an outgoing packet to all clients."""
         _LOGGER.debug("Server writing event %s", event)
         pkt = event.encode()
-        self._write_to_all_clients(pkt.encode().encode("ascii"))
+        self.write_to_all_clients(pkt.encode().encode("ascii"))
 
     def _on_client_connected(self, conn: socket.socket, addr: Any) -> None:
         """
@@ -151,7 +151,7 @@ class Server:
 
         _LOGGER.info("Client thread ending for: %s : %s", addr, conn)
 
-    def _write_to_all_clients(self, data: bytes) -> None:
+    def write_to_all_clients(self, data: bytes) -> None:
         """Send data to all connected clients."""
         _LOGGER.debug("Server writing message %s to all clients", data)
         with self._clients_lock:

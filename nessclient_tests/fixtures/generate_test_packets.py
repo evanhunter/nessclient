@@ -1,274 +1,566 @@
-import enum
+"""Generate large lists of test packets covering all possibilities."""
+
+from dataclasses import dataclass
 from datetime import datetime
 
 from nessclient.event import (
-    StatusUpdate,
-    ViewStateUpdate,
     PanelVersionUpdate,
+    StatusUpdate,
+    SystemStatusEvent,
+    ViewStateUpdate,
 )
 
 
-def Gemerate_Input_To_Ness_User_Interface_Valid_Packets() -> list[tuple[str, str]]:
-    Input_To_Ness_User_Interface_Valid_Packets: list[tuple[str, str]] = []
+@dataclass
+class TestPacketWithDescription:
+    """A structure for a test packet with description."""
+
+    __test__ = False
+
+    packet_chars: str
+    description: str
+
+
+def gemerate_input_to_ness_user_interface_valid_packets() -> list[
+    TestPacketWithDescription
+]:
+    """
+    Generate a list with data combinations for UI request packets.
+
+    List contains packets with:
+    * All possible addresses
+    * Delay marker ('?') or no delay marker
+    * All valid lengths
+    """
+    input_to_ness_user_interface_valid_packets: list[TestPacketWithDescription] = []
     data = "AHEXFVPDM*#0123456789SAHEXFVPD"
-    for address in range(0x0, 0xF + 1):
+    for address in range(0xF + 1):
         for delay_marker in ["", "?"]:
             for length in range(1, 30 + 1):
                 packet = f"83{address:X}{length:02X}60{data[0:length]}"
                 checksum = (256 - sum([ord(x) for x in packet])) % 256
                 packet = f"{packet}{checksum:02X}{delay_marker}\r\n"
-                Input_To_Ness_User_Interface_Valid_Packets.append(
-                    (
-                        packet,
-                        f"Input UI request to address {address}"
-                        f"with {length} bytes of data",
+                input_to_ness_user_interface_valid_packets.append(
+                    TestPacketWithDescription(
+                        packet_chars=packet,
+                        description=(
+                            f"Input UI request to address {address}"
+                            f"with {length} bytes of data"
+                        ),
                     )
                 )
-    return Input_To_Ness_User_Interface_Valid_Packets
+    return input_to_ness_user_interface_valid_packets
 
 
-def Gemerate_Data_For_Output_From_Ness_Event_Data_Packets() -> list[tuple[str, str]]:
+def gemerate_data_for_output_from_ness_event_data_packets() -> list[  # noqa: PLR0912, PLR0915 # Not worth reducing complexity
+    TestPacketWithDescription
+]:
+    """Generate data for all possible System Status Output Events."""
+    zone_range = list(
+        range(SystemStatusEvent.ZONE_ID_MIN, SystemStatusEvent.ZONE_ID_MAX + 1)
+    )
+    user_range = list(
+        range(SystemStatusEvent.USER_ID_MIN, SystemStatusEvent.USER_ID_MAX + 1)
+    )
 
-    class AlarmArea(enum.Enum):
-        Area1 = 0x01
-        Area2 = 0x02
-        Home = 0x03
-        Day = 0x04
-        TwentyFourHour = 0x80
-        Fire = 0x81
-        Panic = 0x82
-        Medical = 0x83
-        Duress = 0x84
-        Door = 0x85
-
-    class OutputType(enum.Enum):
-        AUX1 = 1
-        AUX2 = 2
-        AUX3 = 3
-        AUX4 = 4
-        AUX5 = 5
-        AUX6 = 6
-        AUX7 = 7
-        AUX8 = 8
-        AUX9 = 9
-        AUX10 = 10
-        Siren = 90
-        Soft_Siren = 91
-        Soft_Home = 92
-        Siren_Fire = 93
-        Strobe = 94
-        Reset = 95
-        Sonalert = 96
-        Keypad_Display_Enable = 97
-
-    zone_range = list(range(1, 16 + 1))
-    user_range = list(range(1, 56 + 1))
-
-    data: list[tuple[str, str]] = []
+    data: list[TestPacketWithDescription] = []
 
     # Zone or User EVENTS
-    data.append(("010000", "Power up or reset"))
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="010000", description="Power up or reset"
+        )
+    )
 
+    # Sealed / Unsealed for each zone
     for zone in zone_range:
-        data.append((f"00{zone:02d}00", f"Unsealed Zone {zone} Current zone state"))
-        data.append((f"01{zone:02d}00", f"Sealed   Zone {zone} Current zone state"))
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"00{zone:02d}00",
+                description=f"Unsealed Zone {zone} Current zone state",
+            )
+        )
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"01{zone:02d}00",
+                description=f"Sealed   Zone {zone} Current zone state",
+            )
+        )
 
+    # Sealed / Unsealed user door
     for user in user_range:
         for door in range(1, 3 + 1):
             data.append(
-                (f"00{user:02d}a{door:x}", f"Unsealed User {user} access door {door}")
+                TestPacketWithDescription(
+                    packet_chars=f"00{user:02d}a{door:x}",
+                    description=f"Unsealed User {user} access door {door}",
+                )
             )
             data.append(
-                (f"01{user:02d}a{door:x}", f"Sealed   User {user} access door {door}")
+                TestPacketWithDescription(
+                    packet_chars=f"01{user:02d}a{door:x}",
+                    description=f"Sealed   User {user} access door {door}",
+                )
             )
 
+    # Alarm / Alarm-Restore Zone + Area
     for zone in zone_range:
         for area in [
-            AlarmArea.Area1,
-            AlarmArea.Area2,
-            AlarmArea.Home,
-            AlarmArea.Day,
-            AlarmArea.TwentyFourHour,
-            AlarmArea.Fire,
-            AlarmArea.Door,
+            SystemStatusEvent.AlarmArea.Area1,
+            SystemStatusEvent.AlarmArea.Area2,
+            SystemStatusEvent.AlarmArea.Home,
+            SystemStatusEvent.AlarmArea.Day,
+            SystemStatusEvent.AlarmArea.TwentyFourHour,
+            SystemStatusEvent.AlarmArea.Fire,
+            SystemStatusEvent.AlarmArea.Door,
         ]:
             data.append(
-                (
-                    f"02{zone:02d}{area.value:02x}",
-                    f"Alarm         zone {zone} & area {area}",
+                TestPacketWithDescription(
+                    packet_chars=f"02{zone:02d}{area.value:02x}",
+                    description=f"Alarm         zone {zone} & area {area}",
                 )
             )
             data.append(
-                (
-                    f"03{zone:02d}{area.value:02x}",
-                    f"Alarm Restore zone {zone} & area {area}",
+                TestPacketWithDescription(
+                    packet_chars=f"03{zone:02d}{area.value:02x}",
+                    description=f"Alarm Restore zone {zone} & area {area}",
                 )
             )
 
-    for area in [AlarmArea.Fire, AlarmArea.Panic, AlarmArea.Medical, AlarmArea.Duress]:
-        data.append((f"02f0{area.value:02x}", f"Alarm         Area {area} Keypad"))
-        data.append((f"03f0{area.value:02x}", f"Alarm Restore Area {area} Keypad"))
+    # Alarm / Alarm-Restore Keypad - Area
+    for area in [
+        SystemStatusEvent.AlarmArea.Fire,
+        SystemStatusEvent.AlarmArea.Panic,
+        SystemStatusEvent.AlarmArea.Medical,
+        SystemStatusEvent.AlarmArea.Duress,
+    ]:
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"02f0{area.value:02x}",
+                description=f"Alarm         Area {area} Keypad",
+            )
+        )
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"03f0{area.value:02x}",
+                description=f"Alarm Restore Area {area} Keypad",
+            )
+        )
 
+    # Alarm / Alarm-Restore Radio Panic - User
     for user in user_range:
-        data.append((f"02{user:02d}82", f"Alarm         User {user} Radio Panic"))
-        data.append((f"03{user:02d}82", f"Alarm Restore User {user} Radio Panic"))
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"02{user:02d}82",
+                description=f"Alarm         User {user} Radio Panic",
+            )
+        )
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"03{user:02d}82",
+                description=f"Alarm Restore User {user} Radio Panic",
+            )
+        )
 
-    data.append(("020082", "Alarm Keyswitch Panic"))
-    data.append(("030082", "Alarm Restore Keyswitch Panic"))
+    # Alarm / Alarm-Restore Keyswitch Panic
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="020082", description="Alarm Keyswitch Panic"
+        )
+    )
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="030082", description="Alarm Restore Keyswitch Panic"
+        )
+    )
 
+    # Manual Exclude / Manual Include - Zone
+    for zone in zone_range:
+        # NOTE: These have areas listed in spec, but no values
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"04{zone:02d}00",
+                description=f"Manual Exclude zone {zone}",
+            )
+        )
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"05{zone:02d}00",
+                description=f"Manual Include zone {zone}",
+            )
+        )
+
+    # Auto Exclude / Auto Include - Zone
+    for zone in zone_range:
+        # NOTE: These have areas listed in spec, but no values
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"06{zone:02d}00", description=f"Auto Exclude zone {zone}"
+            )
+        )
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"07{zone:02d}00", description=f"Auto Include zone {zone}"
+            )
+        )
+
+    # Tamper Unsealed / Tamper Normal - Main unit tamper
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="080000",
+            description="Tamper Unsealed Main Unit Internal Tamper",
+        )
+    )
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="090000",
+            description="Tamper Normal   Main Unit Internal Tamper",
+        )
+    )
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="080001",
+            description="Tamper Unsealed Main Unit External Tamper",
+        )
+    )
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="090001",
+            description="Tamper Normal   Main Unit External Tamper",
+        )
+    )
+
+    # Tamper Unsealed / Tamper Normal - Keypad tamper
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="08f000", description="Tamper Unsealed Keypad Tamper"
+        )
+    )
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="09f000", description="Tamper Normal   Keypad Tamper"
+        )
+    )
+
+    # Tamper Unsealed / Tamper Normal - Radio Zone tamper
     for zone in zone_range:
         data.append(
-            (f"04{zone:02d}00", f"Manual Exclude zone {zone}")
-        )  # TODO: Can this take an area?
+            TestPacketWithDescription(
+                packet_chars=f"08{zone:02d}91",
+                description=f"Radio Detector Tamper Zone {zone} Unsealed",
+            )
+        )
         data.append(
-            (f"05{zone:02d}00", f"Manual Include zone {zone}")
-        )  # TODO: Can this take an area?
-
-    for zone in zone_range:
-        data.append(
-            (f"06{zone:02d}00", f"Auto Exclude zone {zone}")
-        )  # TODO: Can this take an area?
-        data.append(
-            (f"07{zone:02d}00", f"Auto Include zone {zone}")
-        )  # TODO: Can this take an area?
-
-    data.append(("080000", "Tamper Unsealed Main Unit Internal Tamper"))
-    data.append(("090000", "Tamper Normal   Main Unit Internal Tamper"))
-    data.append(("080001", "Tamper Unsealed Main Unit External Tamper"))
-    data.append(("090001", "Tamper Normal   Main Unit External Tamper"))
-    data.append(("08f000", "Tamper Unsealed Keypad Tamper"))
-    data.append(("09f000", "Tamper Normal   Keypad Tamper"))
-
-    for zone in zone_range:
-        data.append((f"08{zone:02d}91", f"Radio Detector Tamper Zone {zone} Unsealed"))
-        data.append((f"09{zone:02d}91", f"Radio Detector Tamper Zone {zone} Normal"))
+            TestPacketWithDescription(
+                packet_chars=f"09{zone:02d}91",
+                description=f"Radio Detector Tamper Zone {zone} Normal",
+            )
+        )
 
     # System EVENTS
-    data.append(("100000", "Power Failure AC Mains Fail"))
-    data.append(("110000", "Power Normal  AC Mains Restored"))
-    data.append(("120000", "Battery Failure - Main Battery"))
-    data.append(("130000", "Battery Normal  - Main Battery"))
+
+    # Power Failure / Power Normal
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="100000", description="Power Failure AC Mains Fail"
+        )
+    )
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="110000", description="Power Normal  AC Mains Restored"
+        )
+    )
+
+    # Battery Failure / Battery Normal - Main unit
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="120000", description="Battery Failure - Main Battery"
+        )
+    )
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="130000", description="Battery Normal  - Main Battery"
+        )
+    )
+
+    # Battery Failure / Battery Normal - Radio key - per user
     for user in user_range:
         data.append(
-            (f"12{user:02d}92", f"Battery Failure user {user} - Radio Key Battery")
+            TestPacketWithDescription(
+                packet_chars=f"12{user:02d}92",
+                description=f"Battery Failure user {user} - Radio Key Battery",
+            )
         )
         data.append(
-            (f"13{user:02d}92", f"Battery Normal  user {user} - Radio Key Battery")
+            TestPacketWithDescription(
+                packet_chars=f"13{user:02d}92",
+                description=f"Battery Normal  user {user} - Radio Key Battery",
+            )
         )
 
+    # Battery Failure / Battery Normal - Radio detector - per zone
     for zone in zone_range:
         data.append(
-            (f"12{zone:02d}91", f"Battery Failure zone {zone} - Radio Detector Battery")
+            TestPacketWithDescription(
+                packet_chars=f"12{zone:02d}91",
+                description=f"Battery Failure zone {zone} - Radio Detector Battery",
+            )
         )
         data.append(
-            (f"13{zone:02d}91", f"Battery Normal  zone {zone} - Radio Detector Battery")
+            TestPacketWithDescription(
+                packet_chars=f"13{zone:02d}91",
+                description=f"Battery Normal  zone {zone} - Radio Detector Battery",
+            )
         )
 
-    data.append(("140000", "Report Failure - Dialer Failed to Report"))
-    data.append(("150000", "Report Normal"))
+    # Report Failure / Report Normal
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="140000",
+            description="Report Failure - Dialer Failed to Report",
+        )
+    )
+    data.append(
+        TestPacketWithDescription(packet_chars="150000", description="Report Normal")
+    )
 
+    # Supervision Failure / Supervision Normal - per zone
     for zone in zone_range:
-        data.append((f"16{zone:02d}00", f"Supervision Zone {zone} Failure"))
-        data.append((f"17{zone:02d}00", f"Supervision Zone {zone} Normal"))
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"16{zone:02d}00",
+                description=f"Supervision Zone {zone} Failure",
+            )
+        )
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"17{zone:02d}00",
+                description=f"Supervision Zone {zone} Normal",
+            )
+        )
 
-    data.append(("190000", "Real Time Clock - RTC Time or Date Changed"))
+    # Real Time Clock
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="190000",
+            description="Real Time Clock - RTC Time or Date Changed",
+        )
+    )
 
     # Area EVENTS
+    # Entry Delay Start / End  - Zone and Area
     for zone in zone_range:
-        for area in [AlarmArea.Area1, AlarmArea.Area2, AlarmArea.Home]:
+        for area in [
+            SystemStatusEvent.AlarmArea.Area1,
+            SystemStatusEvent.AlarmArea.Area2,
+            SystemStatusEvent.AlarmArea.Home,
+        ]:
             data.append(
-                (
-                    f"20{zone:02d}{area.value:02x}",
-                    f"Entry Delay Start zone {zone} - When Armed in Area {area}",
+                TestPacketWithDescription(
+                    packet_chars=f"20{zone:02d}{area.value:02x}",
+                    description=(
+                        f"Entry Delay Start zone {zone} - When Armed in Area {area}"
+                    ),
                 )
             )
             data.append(
-                (
-                    f"21{zone:02d}{area.value:02x}",
-                    f"Entry Delay End   zone {zone} - When Armed in Area {area}",
+                TestPacketWithDescription(
+                    packet_chars=f"21{zone:02d}{area.value:02x}",
+                    description=(
+                        f"Entry Delay End   zone {zone} - When Armed in Area {area}"
+                    ),
                 )
             )
 
+    # Exit Delay Start / End  - Zone and Area
     for zone in zone_range:
         data.append(
-            (
-                f"22{zone:02d}{area.value:02x}",
-                f"Exit  Delay Start zone {zone}- When Armed in Area {area}",
+            TestPacketWithDescription(
+                packet_chars=f"22{zone:02d}{area.value:02x}",
+                description=f"Exit  Delay Start zone {zone}- When Armed in Area {area}",
             )
         )
         data.append(
-            (
-                f"23{zone:02d}{area.value:02x}",
-                f"Exit  Delay End   zone {zone}- When Armed in Area {area}",
+            TestPacketWithDescription(
+                packet_chars=f"23{zone:02d}{area.value:02x}",
+                description=f"Exit  Delay End   zone {zone}- When Armed in Area {area}",
             )
         )
 
-    for user in user_range:
-        for area in [AlarmArea.Area1, AlarmArea.Area2]:
-            data.append(
-                (
-                    f"24{user:02d}{area.value:02x}",
-                    f"Armed Away user {user} - area {area}",
-                )
+    # Armed Away - User + Area
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"24{user:02d}{area.value:02x}",
+                description=f"Armed Away user {user} - area {area}",
             )
+            for area in [
+                SystemStatusEvent.AlarmArea.Area1,
+                SystemStatusEvent.AlarmArea.Area2,
+            ]
+            for user in user_range
+        ]
+    )
 
-    for area in [AlarmArea.Area1, AlarmArea.Area2]:
-        data.append((f"2457{area.value:02x}", f"Armed Away keyswitch - area {area}"))
-        data.append((f"2458{area.value:02x}", f"Armed Away Short Arm - area {area}"))
-
-    for user in user_range:
-        data.append((f"25{user:02d}03", f"Armed Home user {user}"))
-
-    data.append(("255703", "Armed Home Keyswitch"))
-    data.append(("255803", "Armed Home Short Arm"))
-
-    data.append(("260004", "Armed Day"))
-    data.append(("270000", "Armed Night"))
-    data.append(("280000", "Armed Vacation"))
-    data.append(("2e0000", "Armed Highest"))
-
-    for user in user_range:
-        for area in [AlarmArea.Area1, AlarmArea.Area2, AlarmArea.Home, AlarmArea.Day]:
-            data.append(
-                (f"2f{user:02d}{area.value:02x}", f"Disarmed user {user}, area {area}")
+    # Armed Away - Keyswitch - Area
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"2457{area.value:02x}",
+                description=f"Armed Away keyswitch - area {area}",
             )
+            for area in [
+                SystemStatusEvent.AlarmArea.Area1,
+                SystemStatusEvent.AlarmArea.Area2,
+            ]
+        ]
+    )
 
-    for area in [AlarmArea.Area1, AlarmArea.Area2, AlarmArea.Home, AlarmArea.Day]:
-        data.append((f"2f57{area.value:02x}", f"Disarmed Keyswitch, area {area}"))
-
-    for user in user_range:
-        for area in [AlarmArea.Area1, AlarmArea.Area2, AlarmArea.Home]:
-            data.append(
-                (
-                    f"2f{user:02d}{area.value:02x}",
-                    f"Arming Delayed user {user}, area {area}",
-                )
+    # Armed Away - Short Arm - Area
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"2458{area.value:02x}",
+                description=f"Armed Away Short Arm - area {area}",
             )
+            for area in [
+                SystemStatusEvent.AlarmArea.Area1,
+                SystemStatusEvent.AlarmArea.Area2,
+            ]
+        ]
+    )
+
+    # Armed Home - User
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"25{user:02d}03", description=f"Armed Home user {user}"
+            )
+            for user in user_range
+        ]
+    )
+
+    # Armed Home - Keyswitch
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="255703", description="Armed Home Keyswitch"
+        )
+    )
+
+    # Armed Home - Short Arm
+    data.append(
+        TestPacketWithDescription(
+            packet_chars="255803", description="Armed Home Short Arm"
+        )
+    )
+
+    # Armed Day
+    data.append(
+        TestPacketWithDescription(packet_chars="260004", description="Armed Day")
+    )
+
+    # Armed Night
+    data.append(
+        TestPacketWithDescription(packet_chars="270000", description="Armed Night")
+    )
+
+    # Armed Vacation
+    data.append(
+        TestPacketWithDescription(packet_chars="280000", description="Armed Vacation")
+    )
+
+    # Armed Highest
+    data.append(
+        TestPacketWithDescription(packet_chars="2e0000", description="Armed Highest")
+    )
+
+    # Disarmed - User + Area
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"2f{user:02d}{area.value:02x}",
+                description=f"Disarmed user {user}, area {area}",
+            )
+            for area in [
+                SystemStatusEvent.AlarmArea.Area1,
+                SystemStatusEvent.AlarmArea.Area2,
+                SystemStatusEvent.AlarmArea.Home,
+                SystemStatusEvent.AlarmArea.Day,
+            ]
+            for user in user_range
+        ]
+    )
+
+    # Disarmed - Keyswitch + Area
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"2f57{area.value:02x}",
+                description=f"Disarmed Keyswitch, area {area}",
+            )
+            for area in [
+                SystemStatusEvent.AlarmArea.Area1,
+                SystemStatusEvent.AlarmArea.Area2,
+                SystemStatusEvent.AlarmArea.Home,
+                SystemStatusEvent.AlarmArea.Day,
+            ]
+        ]
+    )
+
+    # Arming Delayed - User + Area
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"2f{user:02d}{area.value:02x}",
+                description=f"Arming Delayed user {user}, area {area}",
+            )
+            for area in [
+                SystemStatusEvent.AlarmArea.Area1,
+                SystemStatusEvent.AlarmArea.Area2,
+                SystemStatusEvent.AlarmArea.Home,
+            ]
+            for user in user_range
+        ]
+    )
 
     # Result EVENTS
-    for output in OutputType:
-        data.append((f"31{output.value:02d}00", f"Output {output} On"))
-        data.append((f"32{output.value:02d}00", f"Output {output} Off"))
+    # Output On / Off - Output ID
+    for output in SystemStatusEvent.OutputId:
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"31{output.value:02d}00",
+                description=f"Output {output} On",
+            )
+        )
+        data.append(
+            TestPacketWithDescription(
+                packet_chars=f"32{output.value:02d}00",
+                description=f"Output {output} Off",
+            )
+        )
 
     return data
 
 
-def Gemerate_Output_From_Ness_Event_Data_Valid_Packets() -> list[tuple[str, str]]:
-    Output_From_Ness_Event_Data_Valid_Data = (
-        Gemerate_Data_For_Output_From_Ness_Event_Data_Packets()
+def gemerate_output_from_ness_event_data_valid_packets() -> list[
+    TestPacketWithDescription
+]:
+    """Generate test packets for all possible System Status Output Events."""
+    output_from_ness_event_data_valid_data: list[TestPacketWithDescription] = (
+        gemerate_data_for_output_from_ness_event_data_packets()
     )
 
-    Output_From_Ness_Event_Data_Valid_Packets = []
+    output_from_ness_event_data_valid_packets: list[TestPacketWithDescription] = []
     for start in ["82", "83", "86", "87"]:
-        for address in range(0x0, 0xF + 1):
+        for address in range(0xF + 1):
             for seq in [0, 8]:
-                for data, name in Output_From_Ness_Event_Data_Valid_Data:
-                    if start == "83" or start == "87":
-                        packet = f"{start}{address:02x}{seq}361{data}"
+                for test_pkt in output_from_ness_event_data_valid_data:
+                    if start in {"83", "87"}:
+                        packet = f"{start}{address:02x}{seq}361{test_pkt.packet_chars}"
                     else:
-                        packet = f"{start}{seq}361{data}"
-                    if start == "86" or start == "87":
-                        packet += datetime.now().strftime("%y%m%d%H%M%S")
+                        packet = f"{start}{seq}361{test_pkt.packet_chars}"
+                    if start in {"86", "87"}:
+                        packet += datetime.now().strftime("%y%m%d%H%M%S")  # noqa: DTZ005 - local timezone - No function available
 
                     total = 0
                     for pos in range(0, len(packet), 2):
@@ -276,18 +568,23 @@ def Gemerate_Output_From_Ness_Event_Data_Valid_Packets() -> list[tuple[str, str]
                     checksum = (256 - total) % 256
                     packet = f"{packet}{checksum:02x}\r\n"
 
-                    Output_From_Ness_Event_Data_Valid_Packets.append(
-                        (
-                            packet,
-                            f"{name} for address {address} "
-                            f"with start={start} and seq={seq}",
+                    output_from_ness_event_data_valid_packets.append(
+                        TestPacketWithDescription(
+                            packet_chars=packet,
+                            description=(
+                                f"{test_pkt.description} for address {address} "
+                                f"with start={start} and seq={seq}"
+                            ),
                         )
                     )
 
-    return Output_From_Ness_Event_Data_Valid_Packets
+    return output_from_ness_event_data_valid_packets
 
 
+# Random data for generating Status Update Response packets
 # Randomly generated combinations for bit-field values
+# This comes from the output of make_random_lists.py
+# It is static data to ensure tests are repeatable
 
 # fmt: off
 zones_list = [
@@ -444,92 +741,117 @@ zone_based_ids = [
 ]
 
 
-def Generate_Output_From_Ness_Status_Update_Valid_Data() -> list[tuple[str, str]]:
-    data: list[tuple[str, str]] = []
+def generate_output_from_ness_status_update_valid_data() -> list[
+    TestPacketWithDescription
+]:
+    """Generate a large selection of data for Status Update Responses."""
+    data: list[TestPacketWithDescription] = []
 
-    for req in zone_based_ids:
-        for zones_val in zones_list:
-            data.append(
-                (
-                    f"{req.value:02d}{zones_val:04x}",
-                    f"{req.name} with zones {zones_val:04x}",
-                )
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"{req.value:02d}{zones_val:04x}",
+                description=f"{req.name} with zones {zones_val:04x}",
             )
+            for req in zone_based_ids
+            for zones_val in zones_list
+        ]
+    )
 
     req = StatusUpdate.RequestID.MISCELLANEOUS_ALARMS
-    for misc_val in misc_alarm_list:
-        data.append(
-            (f"{req.value:02d}{misc_val:04x}", f"{req.name} with alarms {misc_val:04x}")
-        )
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"{req.value:02d}{misc_val:04x}",
+                description=f"{req.name} with alarms {misc_val:04x}",
+            )
+            for misc_val in misc_alarm_list
+        ]
+    )
 
     req = StatusUpdate.RequestID.ARMING
-    for arming_val in arming_list:
-        data.append(
-            (
-                f"{req.value:02d}{arming_val:04x}",
-                f"{req.name} with arming status {arming_val:04x}",
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"{req.value:02d}{arming_val:04x}",
+                description=f"{req.name} with arming status {arming_val:04x}",
             )
-        )
+            for arming_val in arming_list
+        ]
+    )
 
     req = StatusUpdate.RequestID.OUTPUTS
-    for output_val in output_list:
-        data.append(
-            (
-                f"{req.value:02d}{output_val:04x}",
-                f"{req.name} with output state {output_val:04x}",
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"{req.value:02d}{output_val:04x}",
+                description=f"{req.name} with output state {output_val:04x}",
             )
-        )
+            for output_val in output_list
+        ]
+    )
 
     req = StatusUpdate.RequestID.VIEW_STATE
-    for viewstate in ViewStateUpdate.State:
-        print(f"viewstate.value={req.value:02d}{viewstate.value:04x}")
-        data.append(
-            (
-                f"{req.value:02d}{viewstate.value:04x}",
-                f"{req.name} with view state {viewstate.value:04x}",
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"{req.value:02d}{viewstate.value:04x}",
+                description=f"{req.name} with view state {viewstate.value:04x}",
             )
-        )
+            for viewstate in ViewStateUpdate.State
+        ]
+    )
 
     req = StatusUpdate.RequestID.PANEL_VERSION
-    for ver in range(0, 0xFF + 1):
-        for model in PanelVersionUpdate.Model:
-            data.append(
-                (
-                    f"{req.value:02d}{model.value:02x}{ver:02x}",
-                    f"{req.name} with model {model.name} version {ver:02x}",
-                )
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"{req.value:02d}{model.value:02x}{ver:02x}",
+                description=f"{req.name} with model {model.name} version {ver:02x}",
             )
+            for ver in range(0xFF + 1)
+            for model in PanelVersionUpdate.Model
+        ]
+    )
 
     req = StatusUpdate.RequestID.AUXILIARY_OUTPUTS
-    for auxoutput_val in auxoutput_list:
-        data.append(
-            (
-                f"{req.value:02d}{auxoutput_val:04x}",
-                f"{req.name} with aux output state {auxoutput_val:04x}",
+    data.extend(
+        [
+            TestPacketWithDescription(
+                packet_chars=f"{req.value:02d}{auxoutput_val:04x}",
+                description=f"{req.name} with aux output state {auxoutput_val:04x}",
             )
-        )
+            for auxoutput_val in auxoutput_list
+        ]
+    )
 
     return data
 
 
 # Responses to a User-Interface Status Request Packet
-def Gemerate_Output_From_Ness_Status_Update_Valid_Packets() -> list[tuple[str, str]]:
-    Output_From_Ness_Status_Update_Valid_Data = (
-        Generate_Output_From_Ness_Status_Update_Valid_Data()
+def gemerate_output_from_ness_status_update_valid_packets() -> list[
+    TestPacketWithDescription
+]:
+    """Generate a large selection of test packets Status Update Responses."""
+    output_from_ness_status_update_valid_data: list[TestPacketWithDescription] = (
+        generate_output_from_ness_status_update_valid_data()
     )
 
-    Output_From_Ness_Status_Update_Valid_Packets = []
-    for address in range(0x0, 0xF + 1):
-        for data, name in Output_From_Ness_Status_Update_Valid_Data:
-            packet = f"82{address:02x}0360{data}"
+    output_from_ness_status_update_valid_packets: list[TestPacketWithDescription] = []
+    for address in range(0xF + 1):
+        for test_pkt in output_from_ness_status_update_valid_data:
+            packet = f"82{address:02x}0360{test_pkt.packet_chars}"
             total = 0
             for pos in range(0, len(packet), 2):
                 total += int(packet[pos : pos + 2], 16)
             checksum = (256 - total) % 256
             packet = f"{packet}{checksum:02x}\r\n"
 
-            Output_From_Ness_Status_Update_Valid_Packets.append(
-                (packet, f"{name} for address {address}")
+            output_from_ness_status_update_valid_packets.append(
+                TestPacketWithDescription(
+                    packet_chars=packet,
+                    description=f"{test_pkt.description} for address {address}",
+                )
             )
 
-    return Output_From_Ness_Status_Update_Valid_Packets
+    return output_from_ness_status_update_valid_packets

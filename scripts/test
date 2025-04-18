@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+pipenv run pytest $@
+
+# Run tests with logging output:
+# pipenv run pytest -s --log-cli-level=debug
+
+# Run a specific test with logging output:
+# pipenv run pytest -s --log-cli-level=debug nessclient_tests/test_client.py

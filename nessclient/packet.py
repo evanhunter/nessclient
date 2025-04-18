@@ -66,16 +66,6 @@ class CommandType(Enum):
     USER_INTERFACE = 0x60
 
 
-def is_hex(s: str) -> bool:
-    """Return True if the supplied string is entirely valid hexidecimal characters."""
-    return all(c in "0123456789ABCDEFabcdef" for c in s)
-
-
-def is_valid_ui_data_char(s: str) -> bool:
-    """Return True if the supplied string is valid NESS UI data characters."""
-    return all(c in "AHEXFVPDM*#0123456789S" for c in s)
-
-
 @dataclass
 class Packet:
     """Represents a generic Ness Serial protocol packet."""
@@ -103,6 +93,8 @@ class Packet:
     USER_INTERFACE_RESPONSE_FIXED_START_BYTE = 0x82
 
     USER_INTERFACE_RESPONSE_ENCODED_LENGTH = 16
+
+    VALID_UI_REQUEST_CHARACTERS = "AHEXFVPDM*#0123456789S"
 
     # Start:2, Length:1, Command:2, Checksum:2, Finish:2
     MINIMUM_PACKET_LENGTH = 9
@@ -138,7 +130,7 @@ class Packet:
                         f"update response must be 6 - got {len(data)}"
                     )
                     raise ValueError(msg)
-                if not is_hex(data):
+                if not Packet._is_hex(data):
                     msg = (
                         "Data of a User-Interface status update "
                         f"response must be hex - got {data}"
@@ -181,7 +173,7 @@ class Packet:
                         f" - got {len(data)}"
                     )
                     raise ValueError(msg)
-                if not is_valid_ui_data_char(data):
+                if not Packet._is_valid_ui_data_char(data):
                     msg = (
                         "Data characters of a User-Interface Packet must "
                         f"be one of 'AHEXFVPDM*#01234567890S' - got {data}"
@@ -210,7 +202,7 @@ class Packet:
                     f"must be {Packet.SYSTEM_STATUS_DATA_SIZE} - got {len(data)}"
                 )
                 raise ValueError(msg)
-            if not is_hex(data):
+            if not Packet._is_hex(data):
                 msg = (
                     "Data of a System Status Event Data Packet must "
                     f"be hex - got {data}"
@@ -240,6 +232,16 @@ class Packet:
         self.timestamp = timestamp
         self.is_user_interface_resp = is_user_interface_resp
         self.has_delay_marker = has_delay_marker
+
+    @staticmethod
+    def _is_hex(s: str) -> bool:
+        """Return True if the supplied string is entirely valid hexidecimal chars."""
+        return all(c in "0123456789ABCDEFabcdef" for c in s)
+
+    @staticmethod
+    def _is_valid_ui_data_char(s: str) -> bool:
+        """Return True if the supplied string is valid NESS UI data characters."""
+        return all(c in Packet.VALID_UI_REQUEST_CHARACTERS for c in s)
 
     @property
     def start(self) -> int:

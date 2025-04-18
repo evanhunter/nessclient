@@ -354,50 +354,52 @@ class Client:
                     _LOGGER.debug("Received None data from connection.read()")
                     break
 
-                self._last_recv = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
-                try:
-                    decoded_data = data.decode("ascii")
-                except UnicodeDecodeError:
-                    self.bad_received_packets += 1
-                    _LOGGER.warning("Failed to decode data : %s", data, exc_info=True)
-                    continue
+                self._process_received_data(data)
 
-                _LOGGER.debug("Decoding data: '%s'", decoded_data)
-                if len(decoded_data) > 0:
+    def _process_received_data(self, data: bytes) -> None:
+        """Process a received packet."""
+        self._last_recv = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
+        try:
+            decoded_data = data.decode("ascii")
+        except UnicodeDecodeError:
+            self.bad_received_packets += 1
+            _LOGGER.warning("Failed to decode data : %s", data, exc_info=True)
+            return
+
+        _LOGGER.debug("Decoding data: '%s'", decoded_data)
+        if len(decoded_data) > 0:
+            try:
+                pkt = Packet.decode(decoded_data)
+                event = BaseEvent.decode(pkt)
+            except ValueError:
+                self.bad_received_packets += 1
+                _LOGGER.warning("Failed to decode packet", exc_info=True)
+                return
+            except RuntimeError:
+                _LOGGER.exception("Error whilst decoding packet")
+                return
+
+            _LOGGER.debug("Decoded event: %s", event)
+            # Check if the received packet is a response to a Status Update
+            #  Request which is awaiting the response
+            if isinstance(event, StatusUpdate):
+                f = self._requests_awaiting_response[event.request_id]
+                if f is not None:
+                    _LOGGER.debug("Waiter for %s :  %s", event, f)
                     try:
-                        pkt = Packet.decode(decoded_data)
-                        event = BaseEvent.decode(pkt)
-                    except ValueError:
-                        self.bad_received_packets += 1
-                        _LOGGER.warning("Failed to decode packet", exc_info=True)
-                        continue
-                    except RuntimeError:
-                        _LOGGER.exception("Error whilst decoding packet")
-                        continue
+                        f.set_result(event)
+                    except asyncio.exceptions.InvalidStateError as e:
+                        _LOGGER.info("Waiter already set for %s : %s", f, e)
+                    self._requests_awaiting_response[event.request_id] = None
+                else:
+                    _LOGGER.debug("No waiter %s", self._requests_awaiting_response)
+            else:
+                _LOGGER.debug("Not StatusUpdate: %s", type(event))
 
-                    _LOGGER.debug("Decoded event: %s", event)
-                    # Check if the received packet is a response to a Status Update
-                    #  Request which is awaiting the response
-                    if isinstance(event, StatusUpdate):
-                        f = self._requests_awaiting_response[event.request_id]
-                        if f is not None:
-                            _LOGGER.debug("Waiter for %s :  %s", event, f)
-                            try:
-                                f.set_result(event)
-                            except asyncio.exceptions.InvalidStateError as e:
-                                _LOGGER.info("Waiter already set for %s : %s", f, e)
-                            self._requests_awaiting_response[event.request_id] = None
-                        else:
-                            _LOGGER.debug(
-                                "No waiter %s", self._requests_awaiting_response
-                            )
-                    else:
-                        _LOGGER.debug("Not StatusUpdate: %s", type(event))
+            if self._on_event_received is not None:
+                self._on_event_received(event)
 
-                    if self._on_event_received is not None:
-                        self._on_event_received(event)
-
-                    self.alarm.handle_event(event)
+            self.alarm.handle_event(event)
 
     def _should_reconnect(self) -> bool:
         now = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available

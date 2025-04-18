@@ -368,21 +368,6 @@ class AlarmServer:
         )
         self.server.write_event(event)
 
-    def _simulate_zone_events(self) -> None:
-        """
-        Thread that randomly toggles the sealed/unsealed state of a random zones.
-
-        Toggles in a loop with pauses of 1-5 seconds between each
-        """
-        while (
-            self._simulation_end_event is not None
-            and not self._simulation_end_event.wait(random.randint(1, 5))  # noqa: S311 - Random not used for cryptography
-        ):
-            zone: Zone = random.choice(self.alarm.zones)  # noqa: S311 - Random not used for cryptography
-            self.alarm.update_zone(zone.id, toggled_state(zone.state))
-            _LOGGER.info("Toggled zone: %s", zone)
-        _LOGGER.info("Simulation ended")
-
     def _stop_simulation(self) -> None:
         """Stop the sealed/unsealed random toggling."""
         _LOGGER.debug("Stopping activity simulation")
@@ -395,10 +380,26 @@ class AlarmServer:
 
     def _start_simulation(self) -> None:
         """Start the sealed/unsealed random toggling."""
+
+        def _simulate_zone_events() -> None:
+            """
+            Thread that randomly toggles the sealed/unsealed state of a random zones.
+
+            Toggles in a loop with pauses of 1-5 seconds between each
+            """
+            while (
+                self._simulation_end_event is not None
+                and not self._simulation_end_event.wait(random.randint(1, 5))  # noqa: S311 - Random not used for cryptography
+            ):
+                zone: Zone = random.choice(self.alarm.zones)  # noqa: S311 - Random not used for cryptography
+                self.alarm.update_zone(zone.id, toggled_state(zone.state))
+                _LOGGER.info("Toggled zone: %s", zone)
+            _LOGGER.info("Simulation ended")
+
         if self._simulation_end_event is None:
             self._simulation_end_event = threading.Event()
             self._simulation_thread = threading.Thread(
-                target=self._simulate_zone_events, name="server unseal simulation"
+                target=_simulate_zone_events, name="server unseal simulation"
             )
             self._simulation_thread.start()
 

@@ -2,7 +2,7 @@
 Use [pipenv](https://github.com/pypa/pipenv) to setup the local environment:
 
 ```sh
-pipenv install --dev 
+pipenv install --dev
 ```
 
 ## Running tests

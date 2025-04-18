@@ -4,24 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nessclient"
-version = "3.0.0"
-authors = [{name = "Nick Whyte"}, {name = "Evan Hunter"}]
-maintainers = [{name = "Nick Whyte"}, {name = "Evan Hunter"}]
+version = "2.0.0"
+authors = [{ name = "Nick Whyte" }, { name = "Evan Hunter" }]
+maintainers = [{ name = "Nick Whyte" }, { name = "Evan Hunter" }]
 description = "Implementation/abstraction of the Ness D8x / D16x Serial Interface ASCII protocol"
 classifiers = [
-        "Intended Audience :: Developers",
-        "Programming Language :: Python",
-        "License :: OSI Approved :: MIT License",
-        ]
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+]
 
 dependencies = [
-        "justbackoff",
-        'dataclasses;python_version<"3.7"',
-        "pyserial_asyncio",
-        ]
+    "justbackoff",
+    'dataclasses;python_version<"3.7"',
+    "pyserial_asyncio",
+]
 
 keywords = ["Ness", "Alarm", "D8x", "D16x", "home-automation"]
-license = {file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.10"
 
@@ -29,39 +29,26 @@ requires-python = ">=3.10"
 homepage = "https://github.com/nickw444/nessclient"
 documentation = "https://nessclient.readthedocs.io/en/latest/"
 
-
 [project.scripts]
 ness-cli = "nessclient.cli.__main__:cli"
 
 
 [project.optional-dependencies]
-cli = [
-    "click",
-]
-build = [
-    "build",
-]
-test = [
-    "pytest",
-    "pytest-cov",
-    "pytest-asyncio",
-]
-all = [
-    "nessclient[cli,test,build]"
-]
+cli = ["click"]
+build = ["build"]
+test = ["pytest", "pytest-cov", "pytest-asyncio"]
+all = ["nessclient[cli,test,build]"]
 
 
 [tool.pytest.ini_options]
-markers = [
-    "asyncio",
-]
+markers = ["asyncio"]
 # asyncio_mode = "auto"
 # log_cli = true
 log_cli_level = "DEBUG"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
-log_cli_format="%(asctime)s.%(msecs)03d [%(threadName)-25s] [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_format = "%(asctime)s.%(msecs)03d [%(threadName)-25s] [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
 [tool.coverage.run]
-omit = [
-    ".eggs/*",
-    "setup.py"
-]
+omit = [".eggs/*", "setup.py"]
+
+[tool.setuptools]
+py-modules = ["nessclient"]

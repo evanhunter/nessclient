@@ -5,15 +5,23 @@ name = "pypi"
 
 [packages]
 nessclient = {editable = true, extras = ["cli"], path = "."}
+click = "*"
+justbackoff = "*"
+pyserial_asyncio = "*"
+asyncio = "*"
+dataclasses = "python_version<'3.7'"
 
 [dev-packages]
 codecov = "*"
 flake8 = "*"
 mypy = "*"
-types-setuptools = "*"
 black = "*"
 pytest-mypy = "*"
 build = "*"
+pytest = "*"
+pytest-asyncio = "*"
+pytest-cov = "*"
+
 
 [requires]
 python_version = "3.10"

@@ -1,10 +1,13 @@
+"""Provide the 'events' nessclient CLI command."""
+
 import asyncio
 
 import click
 
-from ..alarm import Alarm, ArmingMode, ArmingState
-from ..client import Client
-from ..event import BaseEvent
+from nessclient.alarm import ArmingMode, ArmingState
+from nessclient.client import Client
+from nessclient.event import BaseEvent
+
 from .server import DEFAULT_PORT
 
 
@@ -22,6 +25,7 @@ def events(
     update_interval: int,
     infer_arming_state: bool,
 ) -> None:
+    """Add the 'events' CLI command which prints received events until cancelled."""
     if serial is not None and host == "localhost" and port == DEFAULT_PORT:
         host = None
         port = None
@@ -35,18 +39,21 @@ def events(
     )
 
     @client.on_zone_change
-    def on_zone_change(zone: int, triggered: bool) -> None:
-        print(f"Zone {zone} changed to {triggered}")
+    def on_zone_change(zone: int, triggered: bool) -> None:  # noqa: FBT001 # Bool part of Pre-defined API
+        print(f"Zone {zone} changed to {triggered}")  # noqa: T201 # Valid CLI print
 
     @client.on_state_change
     def on_state_change(state: ArmingState, arming_mode: ArmingMode | None) -> None:
-        print(f"Alarm state changed to {state} (mode: {arming_mode})")
+        print(f"Alarm state changed to {state} (mode: {arming_mode})")  # noqa: T201 # Valid CLI print
 
     @client.on_event_received
     def on_event_received(event: BaseEvent) -> None:
-        print(event)
+        print(event)  # noqa: T201 # Valid CLI print
 
-    loop.create_task(client.keepalive())
-    loop.create_task(client.update())
+    keepalive_task = loop.create_task(client.keepalive())
+    update_task = loop.create_task(client.update())
 
     loop.run_forever()
+
+    keepalive_task.cancel()
+    update_task.cancel()

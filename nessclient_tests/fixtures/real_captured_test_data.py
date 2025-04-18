@@ -1,4 +1,4 @@
-# Real captured packets from a Ness D8X
+"""Lists of real packets captured from a Ness D8X."""
 
 Output_From_Ness_Event_Data_Real_Packets = [
     # With Address disabled and Timestamp disabled via P199E
