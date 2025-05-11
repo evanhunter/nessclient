@@ -15,11 +15,11 @@ jobs:
           python -m pip install pipenv
           pipenv install --system --dev
       - name: 'Check Formatting (flake8)'
-        run: flake8 nessclient nessclient_tests
+        run: flake8 nessclient examples nessclient_tests docs
       - name: 'Check Formatting (black)'
-        run: black --check nessclient nessclient_tests
+        run: black --check nessclient examples nessclient_tests docs
       - name: 'Check Types'
-        run: python3 -m mypy --strict nessclient
+        run: python3 -m mypy --strict nessclient examples nessclient_tests docs
   build:
     name: "Build and Test"
     runs-on: ubuntu-latest
@@ -48,7 +48,7 @@ jobs:
         run: |
           sed -i "s/0.0.0-dev/$(git describe --tags --exact-match)/" nessclient/__init__.py
           python -m build
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         # Only publish artifacts from Python latest build.
         if: ${{ matrix.python-version == '3.x' }}
         with:
