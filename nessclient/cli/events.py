@@ -39,12 +39,17 @@ def events(
     )
 
     @client.on_zone_change
-    def on_zone_change(zone: int, triggered: bool) -> None:  # noqa: FBT001 # Bool part of Pre-defined API
+    def on_zone_change(
+        zone: int,
+        triggered: bool,  # noqa: FBT001 # Bool part of Pre-defined API
+    ) -> None:
         print(f"Zone {zone} changed to {triggered}")  # noqa: T201 # Valid CLI print
 
     @client.on_state_change
     def on_state_change(state: ArmingState, arming_mode: ArmingMode | None) -> None:
-        print(f"Alarm state changed to {state} (mode: {arming_mode})")  # noqa: T201 # Valid CLI print
+        print(  # noqa: T201 # Valid CLI print
+            f"Alarm state changed to {state} (mode: {arming_mode})"
+        )
 
     @client.on_event_received
     def on_event_received(event: BaseEvent) -> None:

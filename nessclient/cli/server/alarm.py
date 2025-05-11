@@ -246,3 +246,11 @@ class Alarm:
 
         _LOGGER.debug("setting arming state to %s", state)
         self.state = state
+
+    def get_state(self) -> ArmingState:
+        """Get the current Alarm State."""
+        return self.state
+
+    def get_arming_mode(self) -> ArmingMode | None:
+        """Get the current Arming Mode."""
+        return self.arming_mode

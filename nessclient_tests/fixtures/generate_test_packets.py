@@ -21,9 +21,9 @@ class TestPacketWithDescription:
     description: str
 
 
-def gemerate_input_to_ness_user_interface_valid_packets() -> list[
-    TestPacketWithDescription
-]:
+def gemerate_input_to_ness_user_interface_valid_packets() -> (  # ruff/black disagree
+    list[TestPacketWithDescription]
+):
     """
     Generate a list with data combinations for UI request packets.
 
@@ -52,9 +52,9 @@ def gemerate_input_to_ness_user_interface_valid_packets() -> list[
     return input_to_ness_user_interface_valid_packets
 
 
-def gemerate_data_for_output_from_ness_event_data_packets() -> list[  # noqa: PLR0912, PLR0915 # Not worth reducing complexity
-    TestPacketWithDescription
-]:
+def gemerate_data_for_output_from_ness_event_data_packets() -> (  # noqa: PLR0912, PLR0915
+    list[TestPacketWithDescription]
+):
     """Generate data for all possible System Status Output Events."""
     zone_range = list(
         range(SystemStatusEvent.ZONE_ID_MIN, SystemStatusEvent.ZONE_ID_MAX + 1)
@@ -542,9 +542,9 @@ def gemerate_data_for_output_from_ness_event_data_packets() -> list[  # noqa: PL
     return data
 
 
-def gemerate_output_from_ness_event_data_valid_packets() -> list[
-    TestPacketWithDescription
-]:
+def gemerate_output_from_ness_event_data_valid_packets() -> (  # ruff/black disagree
+    list[TestPacketWithDescription]
+):
     """Generate test packets for all possible System Status Output Events."""
     output_from_ness_event_data_valid_data: list[TestPacketWithDescription] = (
         gemerate_data_for_output_from_ness_event_data_packets()
@@ -560,7 +560,10 @@ def gemerate_output_from_ness_event_data_valid_packets() -> list[
                     else:
                         packet = f"{start}{seq}361{test_pkt.packet_chars}"
                     if start in {"86", "87"}:
-                        packet += datetime.now().strftime("%y%m%d%H%M%S")  # noqa: DTZ005 - local timezone - No function available
+                        # Ruff: local timezone - No function available
+                        packet += datetime.now().strftime(  # noqa: DTZ005
+                            "%y%m%d%H%M%S"
+                        )
 
                     total = 0
                     for pos in range(0, len(packet), 2):
@@ -741,9 +744,9 @@ zone_based_ids = [
 ]
 
 
-def generate_output_from_ness_status_update_valid_data() -> list[
-    TestPacketWithDescription
-]:
+def generate_output_from_ness_status_update_valid_data() -> (  # ruff/black disagree
+    list[TestPacketWithDescription]
+):
     """Generate a large selection of data for Status Update Responses."""
     data: list[TestPacketWithDescription] = []
 
@@ -829,9 +832,9 @@ def generate_output_from_ness_status_update_valid_data() -> list[
 
 
 # Responses to a User-Interface Status Request Packet
-def gemerate_output_from_ness_status_update_valid_packets() -> list[
-    TestPacketWithDescription
-]:
+def gemerate_output_from_ness_status_update_valid_packets() -> (  # ruff/black disagree
+    list[TestPacketWithDescription]
+):
     """Generate a large selection of test packets Status Update Responses."""
     output_from_ness_status_update_valid_data: list[TestPacketWithDescription] = (
         generate_output_from_ness_status_update_valid_data()

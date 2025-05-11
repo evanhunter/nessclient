@@ -111,7 +111,9 @@ class AlarmServer:
             print("  AN : Armed Night")  # noqa: T201 # Valid CLI print
             print("  AV : Armed Vacation")  # noqa: T201 # Valid CLI print
             print("  T  : Trip")  # noqa: T201 # Valid CLI print
-            print("  S  : Toggle simulation of random unseal activity")  # noqa: T201 # Valid CLI print
+            print(  # noqa: T201 # Valid CLI print
+                "  S  : Toggle simulation of random unseal activity"
+            )
             print("  Q  : Quit")  # noqa: T201 # Valid CLI print
 
         return True
@@ -175,16 +177,22 @@ class AlarmServer:
         )
         self.server.write_event(event)
 
-    def _aux_state_changed(self, aux_id: int, state: bool) -> None:  # noqa: FBT001 # keep bool argument due to callable
+    def _aux_state_changed(
+        self,
+        aux_id: int,
+        state: bool,  # noqa: FBT001 # keep bool argument due to callable
+    ) -> None:
         """
         Handle aux output changes.
 
         Sends a System Status Event packet to indicate the change
         """
         event = SystemStatusEvent(
-            event_type=SystemStatusEvent.EventType.OUTPUT_ON
-            if state
-            else SystemStatusEvent.EventType.OUTPUT_OFF,
+            event_type=(
+                SystemStatusEvent.EventType.OUTPUT_ON
+                if state
+                else SystemStatusEvent.EventType.OUTPUT_OFF
+            ),
             zone=aux_id,
             area=0,
             timestamp=None,
@@ -193,7 +201,9 @@ class AlarmServer:
         _LOGGER.debug("Aux State change - sending System Status Event: %s", event)
         self.server.write_event(event)
 
-    def _handle_command(self, command: str) -> None:  # noqa: PLR0912 # no simple way to reduce branches
+    def _handle_command(  # noqa: PLR0912 # no simple way to reduce branches
+        self, command: str
+    ) -> None:
         """
         Responds to commands from a TCP client.
 
@@ -389,9 +399,14 @@ class AlarmServer:
             """
             while (
                 self._simulation_end_event is not None
-                and not self._simulation_end_event.wait(random.randint(1, 5))  # noqa: S311 - Random not used for cryptography
+                and not self._simulation_end_event.wait(
+                    random.randint(  # noqa: S311 - Random not used for cryptography
+                        1, 5
+                    )
+                )
             ):
-                zone: Zone = random.choice(self.alarm.zones)  # noqa: S311 - Random not used for cryptography
+                # Ruff: Random not used for cryptography
+                zone: Zone = random.choice(self.alarm.zones)  # noqa: S311
                 self.alarm.update_zone(zone.id, toggled_state(zone.state))
                 _LOGGER.info("Toggled zone: %s", zone)
             _LOGGER.info("Simulation ended")

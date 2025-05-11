@@ -102,7 +102,7 @@ class Packet:
     # Whether or not this packet is a USER_INTERFACE response
     is_user_interface_resp: bool = False
 
-    def __init__(  # noqa: PLR0912, PLR0913, PLR0915 # Not easy to reduce complexity of this
+    def __init__(  # noqa: PLR0912, PLR0913, PLR0915 # Not easy to reduce complexity
         self,
         *,
         command: CommandType,
@@ -349,7 +349,9 @@ class Packet:
         return data + "\r\n"
 
     @classmethod
-    def decode(cls, _data: str) -> "Packet":  # noqa: PLR0912, PLR0915 # Not easy to reduce complexity of this
+    def decode(  # noqa: PLR0912, PLR0915 # Not easy to reduce complexity of this
+        cls, _data: str
+    ) -> "Packet":
         """
         Decode from a Ness Serial ASCII Protocol string into a Packet.
 
@@ -473,7 +475,7 @@ class Packet:
         if bool(Packet.START_BYTE_TIMESTAMP_INCLUDED & start):
             timestamp = _decode_timestamp(data.take_bytes(6, hex_format=True))
 
-        _checksum = data.take_byte_value()  # Checksum has already been validated above
+        data.take_byte_value()  # Checksum has already been validated - just take it
 
         if not data.is_consumed():
             msg = "Unable to consume all data"

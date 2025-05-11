@@ -23,11 +23,14 @@ class Client:
     """Main class that contains the user API for communicating with a NESS alarm."""
 
     connected_count: int
+    reconnect_count: int
     bad_received_packets: int
     disconnection_count: int
     alarm: Alarm
     _on_event_received: Callable[[BaseEvent], None] | None
     _connection: Connection
+    _stop_recv_loop: bool
+    _stop_update_loop: bool
     _closed: bool
     _backoff: Backoff
     _connect_lock: asyncio.Lock
@@ -39,10 +42,12 @@ class Client:
         StatusUpdate.RequestID, asyncio.Future[StatusUpdate] | None
     ]
 
-    DELAY_SECONDS_BETWEEN_SENDS = 0.2
+    DELAY_SECONDS_BETWEEN_SENDS: float = 0.2
 
-    USER_INTERFACE_REQUEST_STATUS_UPDATE_DATA_SIZE = 3
-    USER_INTERFACE_STATUS_UPDATE_MAX_ID = 18
+    USER_INTERFACE_REQUEST_STATUS_UPDATE_DATA_SIZE: int = 3
+    USER_INTERFACE_STATUS_UPDATE_MAX_ID: int = 18
+
+    RECONNECT_EXTRA_DELAY: int = 30
 
     def __init__(  # noqa: PLR0913 # Cannot easily reduce argument count on public API
         self,
@@ -81,6 +86,8 @@ class Client:
         self.alarm = alarm
         self._on_event_received = None
         self._connection = connection
+        self._stop_recv_loop = False
+        self._stop_update_loop = False
         self._closed = False
         self._backoff = Backoff()
         self._connect_lock = asyncio.Lock()
@@ -89,6 +96,7 @@ class Client:
         self._last_sent_time = None
         self._update_interval = update_interval
         self.connected_count = 0
+        self.reconnect_count = 0
         self.disconnection_count = 0
         self.bad_received_packets = 0
 
@@ -209,6 +217,7 @@ class Client:
             if self._should_reconnect():
                 _LOGGER.debug("_connect() - Closing stale connection and reconnecting")
                 await self._connection.close()
+                self.reconnect_count += 1
 
             while not self._connection.connected:
                 _LOGGER.debug("_connect() - Attempting to connect")
@@ -216,7 +225,8 @@ class Client:
                     await self._connection.connect()
                     self.connected_count += 1
                     _LOGGER.debug("_connect() - connected")
-                    self._last_recv = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
+                    # Ruff: local timezone - No function available
+                    self._last_recv = datetime.datetime.now()  # noqa: DTZ005
 
                 except (ConnectionRefusedError, OSError) as e:
                     _LOGGER.warning(
@@ -288,7 +298,8 @@ class Client:
             payload = packet.encode()
 
             # Check if a delay is needed to avoid overwhelming the Ness Alarm
-            now = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
+            # Ruff: local timezone - No function available
+            now = datetime.datetime.now()  # noqa: DTZ005
             if self._last_sent_time is not None:
                 time_since_last_send_delta: datetime.timedelta = (
                     now - self._last_sent_time
@@ -301,7 +312,8 @@ class Client:
                     )
                     _LOGGER.debug("sleeping for %s seconds from %s", sleep_time, now)
                     await asyncio.sleep(sleep_time)
-                    now = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
+                    # Ruff: local timezone - No function available
+                    now = datetime.datetime.now()  # noqa: DTZ005
                     _LOGGER.debug("time after sleep %s", now)
 
             _LOGGER.debug("Sending packet: %s", packet)
@@ -339,9 +351,13 @@ class Client:
 
         return None
 
-    async def _recv_loop(self) -> None:  # noqa: PLR0912 # No easy way to reduce branch count
-        while not self._closed:
-            _LOGGER.debug("_recv_loop() - connecting - closed=%s", self._closed)
+    async def _recv_loop(
+        self,
+    ) -> None:
+        while not self._stop_recv_loop:
+            _LOGGER.debug(
+                "_recv_loop() - connecting - stop_recv_loop=%s", self._stop_recv_loop
+            )
             await self._connect()
             _LOGGER.debug("_recv_loop() - connected")
 
@@ -354,11 +370,14 @@ class Client:
                     _LOGGER.debug("Received None data from connection.read()")
                     break
 
-                self._process_received_data(data)
+                self.process_received_data(data)
 
-    def _process_received_data(self, data: bytes) -> None:
+        _LOGGER.debug("_recv_loop ending")
+
+    def process_received_data(self, data: bytes) -> None:
         """Process a received packet."""
-        self._last_recv = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
+        # Ruff: local timezone - No function available
+        self._last_recv = datetime.datetime.now()  # noqa: DTZ005
         try:
             decoded_data = data.decode("ascii")
         except UnicodeDecodeError:
@@ -402,19 +421,29 @@ class Client:
             self.alarm.handle_event(event)
 
     def _should_reconnect(self) -> bool:
-        now = datetime.datetime.now()  # noqa: DTZ005 - local timezone - No function available
-        _LOGGER.debug("now=%s last_recv=%s", now, self._last_recv)
-        reconnect_time = now - datetime.timedelta(seconds=self._update_interval + 30)
+        # Ruff: local timezone - No function available
+        now = datetime.datetime.now()  # noqa: DTZ005
+        _LOGGER.debug(
+            "now=%s last_recv=%s RECONNECT_EXTRA_DELAY=%s",
+            now,
+            self._last_recv,
+            self.RECONNECT_EXTRA_DELAY,
+        )
+        reconnect_time = now - datetime.timedelta(
+            seconds=self._update_interval + self.RECONNECT_EXTRA_DELAY
+        )
         return self._last_recv is not None and self._last_recv < reconnect_time
 
     async def _update_loop(self) -> None:
         """Schedule a state update to keep the connection alive."""
         _LOGGER.debug("_update_loop sleeping for %s", self._update_interval)
         await asyncio.sleep(self._update_interval)
-        while not self._closed:
+        while not self._stop_update_loop:
             await self.update()
             _LOGGER.debug("_update_loop sleeping for %s", self._update_interval)
             await asyncio.sleep(self._update_interval)
+
+        _LOGGER.debug("_update_loop ending")
 
     async def keepalive(self) -> None:
         """
@@ -437,6 +466,8 @@ class Client:
         """
         _LOGGER.debug("Closing Client")
         self._closed = True
+        self._stop_recv_loop = True
+        self._stop_update_loop = True
         await self._connection.close()
 
     def on_state_change(

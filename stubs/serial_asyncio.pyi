@@ -2,8 +2,6 @@ import asyncio
 from typing import Optional, Any, Callable, ParamSpec, Tuple
 import serial
 
-_P = ParamSpec("_P")
-
 class SerialTransport(asyncio.Transport):
     def __init__(
         self,
@@ -30,10 +28,12 @@ class SerialTransport(asyncio.Transport):
     def abort(self) -> None: ...
     def flush(self) -> None: ...
 
+# _P = ParamSpec("_P")
+
 async def create_serial_connection(
     loop: asyncio.AbstractEventLoop,
     protocol_factory: Callable[[], asyncio.Protocol],
     url: str,
-    *args: _P.args,
-    **kwargs: _P.kwargs
+    *args: Any,
+    **kwargs: Any,
 ) -> Tuple[SerialTransport, asyncio.Protocol]: ...

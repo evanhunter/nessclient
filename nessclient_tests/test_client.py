@@ -7,6 +7,7 @@ import pytest
 from nessclient import Client
 from nessclient.alarm import Alarm
 from nessclient.connection import Connection
+from nessclient.event import BaseEvent
 
 
 @pytest.fixture
@@ -84,7 +85,8 @@ async def test_aux_off(connection: AsyncMock, client: Client) -> None:
 async def test_update(connection: AsyncMock, client: Client) -> None:
     """Test that the update() method sends the correct Status Request packet data."""
     await client.update()
-    assert connection.write.call_count == 3  # noqa: PLR2004 # Magic value not worth a constant
+    # ruff: Magic value not worth a constant
+    assert connection.write.call_count == 3  # noqa: PLR2004
     commands = {
         _get_data(connection.write.call_args_list[0][0][0]),
         _get_data(connection.write.call_args_list[1][0][0]),
@@ -118,43 +120,29 @@ async def test_send_command_2(connection: AsyncMock, client: Client) -> None:
     assert _get_data(connection.write.call_args[0][0]) == b"V*#3468DM"
 
 
-def test_keepalive_bad_data_does_not_crash(
-    client: Client, alarm: AsyncMock, connection: AsyncMock
-) -> None:
-    """Check that"""
-    client.received_data(b"garbage\r\n")
+def test_bad_data_does_not_crash(client: Client, alarm: AsyncMock) -> None:
+    """Check that bad data does not cause issues."""
+    client.process_received_data(b"garbage\r\n")
 
     assert alarm.handle_event.call_count == 0
 
-    connection.return_value.read.return_value = b"garbage\r\n"
 
-    # @patch('')
+def test_on_event_received_callback(
+    client: Client,
+) -> None:
+    """Check that on_event_received() callback gets called."""
+    callback_called = 0
 
-    # task_group: asyncio.futures.Future[tuple[None, None]]
+    @client.on_event_received
+    def on_event_received(_event: BaseEvent) -> None:
+        nonlocal callback_called
+        callback_called += 1
 
-    # async def canceller(timeout: float = 0) -> None:  # noqa: ASYNC109 # asyncio.timeout not available in Python3.10
-    #     if timeout != 0:
-    #         await asyncio.sleep(timeout)
-    #         task_group.cancel()
+    client.process_received_data(
+        b"8603610003002405191446284f\r\n",
+    )
 
-    # task_group = asyncio.gather(canceller(timeout=2), client.keepalive())
-
-    # assert alarm.handle_event.call_count == 0
-
-
-def test_keepalive_unknown_event_does_not_crash() -> None:
-    # TODO(NW): Find a way to test this functionality inside the recv loop
-    pass
-
-
-def test_keepalive_polls_alarm_connection() -> None:
-    # TODO(NW): Find a way to test this functionality inside the send loop
-    pass
-
-
-def test_on_event_received_callback() -> None:
-    # TODO(NW): Find a way to test this functionality inside the recv loop
-    pass
+    assert callback_called > 0
 
 
 def test_on_state_change_callback_is_registered(client: Client, alarm: Mock) -> None:

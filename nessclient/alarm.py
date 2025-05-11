@@ -166,7 +166,9 @@ class Alarm:
         if self.arming_state == ArmingState.TRIGGERED:
             self._update_arming_state(ArmingState.UNKNOWN)
 
-    def _handle_system_status_event(self, event: SystemStatusEvent) -> None:  # noqa: PLR0912 # No easy way to reduce branching
+    def _handle_system_status_event(  # noqa: PLR0912 # No easy way to reduce branching
+        self, event: SystemStatusEvent
+    ) -> None:
         """
         Handle a system status event received from the Ness Alarm.
 

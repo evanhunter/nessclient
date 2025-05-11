@@ -1,9 +1,11 @@
+"""Provide the 'send_command' nessclient CLI command."""
+
 import asyncio
 import logging
 
 import click
 
-from ..client import Client
+from nessclient.client import Client
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,6 +21,7 @@ logging.basicConfig(
 @click.option("--serial", type=str, default=None)
 @click.argument("command")
 def send_command(host: str, port: int, serial: str, command: str) -> None:
+    """Add the 'send_command' CLI command which sends a command packet."""
     _LOGGER.debug("send_command %s %s %s %s", host, port, serial, command)
     loop = asyncio.get_event_loop()
     client = Client(host=host, port=port, serial_tty=serial)

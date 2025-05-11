@@ -18,12 +18,17 @@ def main(timeout: int = 0) -> None:
     client = Client(host=host, port=port)
 
     @client.on_zone_change
-    def on_zone_change(zone: int, triggered: bool) -> None:  # noqa: FBT001 # Bool part of Pre-defined API
+    def on_zone_change(
+        zone: int,
+        triggered: bool,  # noqa: FBT001 # Bool part of Pre-defined API
+    ) -> None:
         print(f"Zone {zone} changed to {triggered}")  # noqa: T201 # Valid CLI print
 
     @client.on_state_change
     def on_state_change(state: ArmingState, mode: ArmingMode | None) -> None:
-        print(f"Alarm state changed to state:{state} mode:{mode}")  # noqa: T201 # Valid CLI print
+        print(  # noqa: T201 # Valid CLI print
+            f"Alarm state changed to state:{state} mode:{mode}"
+        )
 
     @client.on_event_received
     def on_event_received(event: BaseEvent) -> None:
@@ -31,13 +36,15 @@ def main(timeout: int = 0) -> None:
 
     task_group: asyncio.futures.Future[tuple[None, None, None]]
 
-    async def canceller(timeout: float = 0) -> None:  # noqa: ASYNC109 # asyncio.timeout not available in Python3.10
+    async def _canceller(
+        timeout: float = 0,  # noqa: ASYNC109 # asyncio.timeout unavailable in Python3.10
+    ) -> None:
         if timeout != 0:
             await asyncio.sleep(timeout)
             task_group.cancel()
 
     task_group = asyncio.gather(
-        canceller(timeout),
+        _canceller(timeout),
         client.keepalive(),
         client.update(),
     )

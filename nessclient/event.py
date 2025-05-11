@@ -171,6 +171,8 @@ class SystemStatusEvent(BaseEvent):
     sequence: bool
 
     class AlarmArea(Enum):
+        """Alarm area values."""
+
         Area1 = 0x01
         Area2 = 0x02
         Home = 0x03
@@ -183,6 +185,8 @@ class SystemStatusEvent(BaseEvent):
         Door = 0x85
 
     class OutputId(Enum):
+        """Output ID values."""
+
         AUX1 = 1
         AUX2 = 2
         AUX3 = 3
