@@ -48,10 +48,10 @@ jobs:
         run: |
           sed -i "s/0.0.0-dev/$(git describe --tags --exact-match)/" nessclient/__init__.py
           python -m build
-      # - uses: actions/upload-artifact@v2
-      #   # Only publish artifacts from Python latest build.
-      #   if: ${{ matrix.python-version == '3.x' }}
-      #   with:
-      #     name: dist
-      #     path: dist/
-      #     if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        # Only publish artifacts from Python latest build.
+        if: ${{ matrix.python-version == '3.x' }}
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
