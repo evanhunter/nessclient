@@ -102,7 +102,7 @@ class Packet:
     # Whether or not this packet is a USER_INTERFACE response
     is_user_interface_resp: bool = False
 
-    def __init__(  # noqa: PLR0912, PLR0913, PLR0915 # Not easy to reduce complexity
+    def __init__(  # noqa: PLR0913 # Cannot reduce arguments without changing API
         self,
         *,
         command: CommandType,
@@ -120,97 +120,20 @@ class Packet:
 
         Internally it is called by decode() to create the decoded packet.
         """
+        # These checks raise a ValueError if details are invalid
         if command == CommandType.USER_INTERFACE:
             if is_user_interface_resp:
                 # Output (from Ness) Status Update Packet:
                 # (Response to a User-Interface Status Request Packet)
-                if len(data) != Packet.USER_INTERFACE_RESPONSE_DATA_SIZE:
-                    msg = (
-                        "Data length of a User-Interface status "
-                        f"update response must be 6 - got {len(data)}"
-                    )
-                    raise ValueError(msg)
-                if not Packet._is_hex(data):
-                    msg = (
-                        "Data of a User-Interface status update "
-                        f"response must be hex - got {data}"
-                    )
-                    raise ValueError(msg)
-                if address is None:
-                    msg = (
-                        "User-Interface status update responses "
-                        f"must have an address - got {address}"
-                    )
-                    raise ValueError(msg)
-                if timestamp is not None:
-                    msg = (
-                        "User-Interface status update responses "
-                        f"must not have a timestamp - got {timestamp}"
-                    )
-                    raise ValueError(msg)
-                if seq != 0:
-                    msg = (
-                        "User-Interface status update responses do "
-                        f"not use sequence - it must be zero - got {seq}"
-                    )
-                    raise ValueError(msg)
-                if has_delay_marker:
-                    msg = (
-                        "User-Interface status update responses do "
-                        "not use delay markers"
-                    )
-                    raise ValueError(msg)
+                Packet._check_ui_response(
+                    data, address, seq, timestamp, has_delay_marker=has_delay_marker
+                )
             else:
                 # Input (to Ness) User-Interface (Request) Packet:
-                if (
-                    len(data) < Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MIN
-                    or len(data) > Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MAX
-                ):
-                    msg = (
-                        "Data length of a User-Interface Packet must be in the range "
-                        f"{Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MIN}"
-                        f" - {Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MAX}"
-                        f" - got {len(data)}"
-                    )
-                    raise ValueError(msg)
-                if not Packet._is_valid_ui_data_char(data):
-                    msg = (
-                        "Data characters of a User-Interface Packet must "
-                        f"be one of 'AHEXFVPDM*#01234567890S' - got {data}"
-                    )
-                    raise ValueError(msg)
-                if address is None:
-                    msg = f"User-Interface Packet must have an address - got {address}"
-                    raise ValueError(msg)
-                if timestamp is not None:
-                    msg = (
-                        "User-Interface Packet must not have a timestamp "
-                        f"- got {timestamp}"
-                    )
-                    raise ValueError(msg)
-                if seq != 0:
-                    msg = (
-                        "User-Interface Packet do not use sequence "
-                        f"- it must be zero - got {seq}"
-                    )
-                    raise ValueError(msg)
+                Packet._check_ui_request(data, address, seq, timestamp)
         elif command == CommandType.SYSTEM_STATUS:
             # Output (from Ness) Event Data Packet: (see SystemStatusEvent class)
-            if len(data) != Packet.SYSTEM_STATUS_DATA_SIZE:
-                msg = (
-                    "Data length of a System Status Event Data Packet "
-                    f"must be {Packet.SYSTEM_STATUS_DATA_SIZE} - got {len(data)}"
-                )
-                raise ValueError(msg)
-            if not Packet._is_hex(data):
-                msg = (
-                    "Data of a System Status Event Data Packet must "
-                    f"be hex - got {data}"
-                )
-                raise ValueError(msg)
-            if has_delay_marker:
-                msg = "System Status Event Data Packet must not use delay markers"
-                raise ValueError(msg)
+            Packet._check_event_packet(data, has_delay_marker=has_delay_marker)
         else:
             msg = f"Unknown command {command}"
             raise ValueError(msg)
@@ -232,6 +155,113 @@ class Packet:
         self.timestamp = timestamp
         self.is_user_interface_resp = is_user_interface_resp
         self.has_delay_marker = has_delay_marker
+
+    @staticmethod
+    def _check_ui_response(
+        data: str,
+        address: int | None,
+        seq: int,
+        timestamp: datetime.datetime | None,
+        *,
+        has_delay_marker: bool,
+    ) -> None:
+        # Check details of a UI response packet - raise exception if invalid
+        # Output (from Ness) Status Update Packet
+        # (Response to a User-Interface Status Request Packet)
+
+        if len(data) != Packet.USER_INTERFACE_RESPONSE_DATA_SIZE:
+            msg = (
+                "Data length of a User-Interface status "
+                f"update response must be 6 - got {len(data)}"
+            )
+            raise ValueError(msg)
+        if not Packet._is_hex(data):
+            msg = (
+                "Data of a User-Interface status update "
+                f"response must be hex - got {data}"
+            )
+            raise ValueError(msg)
+        if address is None:
+            msg = (
+                "User-Interface status update responses "
+                f"must have an address - got {address}"
+            )
+            raise ValueError(msg)
+        if timestamp is not None:
+            msg = (
+                "User-Interface status update responses "
+                f"must not have a timestamp - got {timestamp}"
+            )
+            raise ValueError(msg)
+        if seq != 0:
+            msg = (
+                "User-Interface status update responses do "
+                f"not use sequence - it must be zero - got {seq}"
+            )
+            raise ValueError(msg)
+        if has_delay_marker:
+            msg = "User-Interface status update responses do not use delay markers"
+            raise ValueError(msg)
+
+    @staticmethod
+    def _check_ui_request(
+        data: str, address: int | None, seq: int, timestamp: datetime.datetime | None
+    ) -> None:
+        # Check details of a UI request packet - raise exception if invalid
+        # Input (to Ness) User-Interface (Request) Packet:
+        # (A User-Interface Status Request Packet)
+        if (
+            len(data) < Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MIN
+            or len(data) > Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MAX
+        ):
+            msg = (
+                "Data length of a User-Interface Packet must be in the range "
+                f"{Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MIN}"
+                f" - {Packet.USER_INTERFACE_REQUEST_DATA_SIZE_MAX}"
+                f" - got {len(data)}"
+            )
+            raise ValueError(msg)
+        if not Packet._is_valid_ui_data_char(data):
+            msg = (
+                "Data characters of a User-Interface Packet must "
+                f"be one of 'AHEXFVPDM*#01234567890S' - got {data}"
+            )
+            raise ValueError(msg)
+        if address is None:
+            msg = f"User-Interface Packet must have an address - got {address}"
+            raise ValueError(msg)
+        if timestamp is not None:
+            msg = f"User-Interface Packet must not have a timestamp - got {timestamp}"
+            raise ValueError(msg)
+        if seq != 0:
+            msg = (
+                "User-Interface Packet do not use sequence "
+                f"- it must be zero - got {seq}"
+            )
+            raise ValueError(msg)
+
+    @staticmethod
+    def _check_event_packet(
+        data: str,
+        *,
+        has_delay_marker: bool,
+    ) -> None:
+        # Check details of a UI request packet - raise exception if invalid
+        # Input (to Ness) User-Interface (Request) Packet:
+        # (A User-Interface Status Request Packet)
+        # Output (from Ness) Event Data Packet: (see SystemStatusEvent class)
+        if len(data) != Packet.SYSTEM_STATUS_DATA_SIZE:
+            msg = (
+                "Data length of a System Status Event Data Packet "
+                f"must be {Packet.SYSTEM_STATUS_DATA_SIZE} - got {len(data)}"
+            )
+            raise ValueError(msg)
+        if not Packet._is_hex(data):
+            msg = f"Data of a System Status Event Data Packet must be hex - got {data}"
+            raise ValueError(msg)
+        if has_delay_marker:
+            msg = "System Status Event Data Packet must not use delay markers"
+            raise ValueError(msg)
 
     @staticmethod
     def _is_hex(s: str) -> bool:

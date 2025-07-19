@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from nessclient.alarm import ARM_EVENTS_MAP, Alarm, ArmingMode, ArmingState
+from nessclient.alarm import ARM_DISARM_EVENTS_MAP, Alarm, ArmingMode, ArmingState
 from nessclient.event import ArmingUpdate, SystemStatusEvent, ZoneUpdate
 
 
@@ -352,8 +352,11 @@ def test_handle_event_system_status_exit_delay_end_from_armed(alarm: Alarm) -> N
 
 
 def test_handle_event_system_status_arm_events(alarm: Alarm) -> None:
-    """Check all System Status updates in ARM_EVENTS_MAP result in ARMING state."""
-    for event_type in ARM_EVENTS_MAP:
+    """Check all ARM System Status updates result in ARMING state."""
+    for event_type in ARM_DISARM_EVENTS_MAP:
+        if event_type == SystemStatusEvent.EventType.DISARMED:
+            continue
+
         alarm.arming_state = ArmingState.DISARMED
         event = SystemStatusEvent(
             address=None, timestamp=None, event_type=event_type, area=0, zone=1

@@ -10,6 +10,12 @@ from .event import ArmingUpdate, BaseEvent, SystemStatusEvent, ZoneUpdate
 _LOGGER = logging.getLogger(__name__)
 
 
+class UnsetValue(Enum):
+    """Represents an unset value distict from None."""
+
+    VAL = 0xFFFFFFFF
+
+
 class ArmingState(Enum):
     """Arming States used with on_state_change() callback."""
 
@@ -40,13 +46,14 @@ class ZoneSealedState(Enum):
     UNSEALED = True
 
 
-ARM_EVENTS_MAP = {
+ARM_DISARM_EVENTS_MAP = {
     SystemStatusEvent.EventType.ARMED_AWAY: ArmingMode.ARMED_AWAY,
     SystemStatusEvent.EventType.ARMED_HOME: ArmingMode.ARMED_HOME,
     SystemStatusEvent.EventType.ARMED_DAY: ArmingMode.ARMED_DAY,
     SystemStatusEvent.EventType.ARMED_NIGHT: ArmingMode.ARMED_NIGHT,
     SystemStatusEvent.EventType.ARMED_VACATION: ArmingMode.ARMED_VACATION,
     SystemStatusEvent.EventType.ARMED_HIGHEST: ArmingMode.ARMED_HIGHEST,
+    SystemStatusEvent.EventType.DISARMED: None,
 }
 
 
@@ -190,49 +197,73 @@ class Alarm:
             event,
         )
 
-        if event.type == SystemStatusEvent.EventType.UNSEALED:
-            self._update_zone(zone_id=event.zone, state=True)
-        elif event.type == SystemStatusEvent.EventType.SEALED:
-            self._update_zone(zone_id=event.zone, state=False)
-        elif event.type == SystemStatusEvent.EventType.ALARM:
-            self._update_arming_state(ArmingState.TRIGGERED)
-        elif event.type == SystemStatusEvent.EventType.ALARM_RESTORE:
-            if self.arming_state != ArmingState.DISARMED:
-                self._update_arming_state(ArmingState.ARMED)
-            else:
-                _LOGGER.warning(
-                    "ALARM_RESTORE only works from DISARMED state - ignoring"
-                )
-        elif event.type == SystemStatusEvent.EventType.ENTRY_DELAY_START:
-            self._update_arming_state(ArmingState.ENTRY_DELAY)
-        elif event.type == SystemStatusEvent.EventType.ENTRY_DELAY_END:
-            # Entry delay has ended - separate event will be received for
-            # either armed, or tripped.
-            pass
-        elif event.type == SystemStatusEvent.EventType.EXIT_DELAY_START:
-            self._update_arming_state(ArmingState.EXIT_DELAY)
-        elif event.type == SystemStatusEvent.EventType.EXIT_DELAY_END:
-            # Exit delay finished - if we were in the process of arming update
-            # state to armed
-            if self.arming_state == ArmingState.EXIT_DELAY:
-                self._update_arming_state(ArmingState.ARMED)
-            else:
-                _LOGGER.warning(
-                    "EXIT_DELAY_END only works from EXIT_DELAY state - ignoring"
-                )
-        elif event.type in ARM_EVENTS_MAP:
-            self._arming_mode = ARM_EVENTS_MAP[event.type]
-            self._update_arming_state(ArmingState.ARMING)
-        elif event.type == SystemStatusEvent.EventType.DISARMED:
-            self._arming_mode = None  # Restore arming mode on disarmed.
-            self._update_arming_state(ArmingState.DISARMED)
-        elif event.type == SystemStatusEvent.EventType.ARMING_DELAYED:
+        state_map: dict[SystemStatusEvent.EventType, ArmingState | None] = {
+            SystemStatusEvent.EventType.ALARM: ArmingState.TRIGGERED,
+            SystemStatusEvent.EventType.ALARM_RESTORE: ArmingState.ARMED,
+            SystemStatusEvent.EventType.ENTRY_DELAY_START: ArmingState.ENTRY_DELAY,
+            # Entry delay has ended - separate event will occur for armed, or tripped.
+            SystemStatusEvent.EventType.ENTRY_DELAY_END: None,
+            SystemStatusEvent.EventType.EXIT_DELAY_START: ArmingState.EXIT_DELAY,
+            # Exit delay finished - if currently arming, update state to armed
+            SystemStatusEvent.EventType.EXIT_DELAY_END: ArmingState.ARMED,
+            SystemStatusEvent.EventType.ARMED_AWAY: ArmingState.ARMING,
+            SystemStatusEvent.EventType.ARMED_HOME: ArmingState.ARMING,
+            SystemStatusEvent.EventType.ARMED_DAY: ArmingState.ARMING,
+            SystemStatusEvent.EventType.ARMED_NIGHT: ArmingState.ARMING,
+            SystemStatusEvent.EventType.ARMED_VACATION: ArmingState.ARMING,
+            SystemStatusEvent.EventType.ARMED_HIGHEST: ArmingState.ARMING,
+            # Clear arming mode on disarmed.
+            SystemStatusEvent.EventType.DISARMED: ArmingState.DISARMED,
             # Auto-timer-arming was delayed by user - Nothing to do
-            pass
+            SystemStatusEvent.EventType.ARMING_DELAYED: None,
+        }
 
-    def _update_arming_state(self, state: ArmingState) -> None:
+        if (
+            event.type == SystemStatusEvent.EventType.EXIT_DELAY_END
+            and self.arming_state != ArmingState.EXIT_DELAY
+        ):
+            _LOGGER.warning(
+                "EXIT_DELAY_END only works from EXIT_DELAY state - ignoring"
+            )
+            return
+
+        if (
+            event.type == SystemStatusEvent.EventType.ALARM_RESTORE
+            and self.arming_state == ArmingState.DISARMED
+        ):
+            _LOGGER.warning(
+                "ALARM_RESTORE does not work from DISARMED state - ignoring"
+            )
+            return
+
+        if event.type in (
+            SystemStatusEvent.EventType.UNSEALED,
+            SystemStatusEvent.EventType.SEALED,
+        ):
+            self._update_zone(
+                zone_id=event.zone,
+                state=event.type == SystemStatusEvent.EventType.UNSEALED,
+            )
+
+        elif event.type in state_map:
+            new_state = state_map[event.type]
+            if new_state is None:
+                return
+
+            mode = ARM_DISARM_EVENTS_MAP.get(event.type, UnsetValue.VAL)
+
+            self._update_arming_state(state=new_state, mode=mode)
+
+    def _update_arming_state(
+        self, state: ArmingState, mode: ArmingMode | UnsetValue | None = UnsetValue.VAL
+    ) -> None:
         if self.arming_state != state:
             self.arming_state = state
+
+            if mode is not UnsetValue.VAL:
+                _LOGGER.debug("updating mode %s to %s", self._arming_mode, mode)
+                self._arming_mode = mode
+
             if self._on_state_change is not None:
                 self._on_state_change(state, self._arming_mode)
 
