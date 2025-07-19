@@ -55,14 +55,14 @@ class PacketTestCase(unittest.TestCase):
         # Zero Length
         with pytest.raises(
             ValueError,
-            match=r"Data length of a User-Interface " r"Packet must be in the range .*",
+            match=r"Data length of a User-Interface Packet must be in the range .*",
         ):
             Packet(address=0, command=CommandType.USER_INTERFACE, data="")
 
         # Too Long (37 chars)
         with pytest.raises(
             ValueError,
-            match=r"Data length of a User-Interface " r"Packet must be in the range .*",
+            match=r"Data length of a User-Interface Packet must be in the range .*",
         ):
             Packet(
                 address=0,

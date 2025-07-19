@@ -383,7 +383,7 @@ class Packet:
             raise ValueError(msg)
 
         # Check and remove the finish marker
-        if _data[-2:] != "\r\n":
+        if not _data.endswith("\r\n"):
             msg = (
                 f"Packet data {_data!r} did not "
                 f"end with CRLF newline - ignoring  {_data[-2:]}"
@@ -406,7 +406,7 @@ class Packet:
 
             # Input Packets can have a command separator delay marker
             # Check for, and remove the delay marker
-            if _data[-1:] == "?":
+            if _data.endswith("?"):
                 _data = _data[:-1]
                 has_delay_marker = True
 
@@ -422,7 +422,7 @@ class Packet:
             except ValueError as e:
                 msg = f"Invalid non-hex character in checksum byte: {_data!r}"
                 raise ValueError(msg) from e
-            if f"{checksum:02X}" != _data[-2:]:
+            if not _data.endswith(f"{checksum:02X}"):
                 msg = (
                     f"Packet checksum for input request must be upper case : {_data!r}"
                 )

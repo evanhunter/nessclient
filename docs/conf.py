@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.abspath(".."))
 project = "nessclient"
 copyright = "2018, Nick Whyte"
 author = "Nick Whyte"
+description = "nessclient Documentation"
 
 # The short X.Y version
 version = ""
@@ -132,7 +133,7 @@ latex_elements: dict[str, str] = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, "nessclient.tex", "nessclient Documentation", "Nick Whyte", "manual"),
+    (master_doc, "nessclient.tex", description, author, "manual"),
 ]
 
 
@@ -140,7 +141,7 @@ latex_documents = [
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [(master_doc, "nessclient", "nessclient Documentation", [author], 1)]
+man_pages = [(master_doc, project, description, [author], 1)]
 
 
 # -- Options for Texinfo output ----------------------------------------------
@@ -151,11 +152,11 @@ man_pages = [(master_doc, "nessclient", "nessclient Documentation", [author], 1)
 texinfo_documents = [
     (
         master_doc,
-        "nessclient",
-        "nessclient Documentation",
+        project,
+        description,
         author,
-        "nessclient",
-        "One line description of project.",
+        project,
+        "Python client for NESS D8/D16 alarm systems.",
         "Miscellaneous",
     ),
 ]

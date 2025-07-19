@@ -227,7 +227,7 @@ class AlarmServer:
             self.alarm.panic()
         elif (
             command[0] in ["5", "6", "8", "9"]
-            and command[1:] == f"{self._master_code}E"
+            and command == f"{command[0]}{self._master_code}E"
         ):
             self.alarm.duress()
         elif command == "2E":

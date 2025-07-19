@@ -228,7 +228,7 @@ class Client:
                     # Ruff: local timezone - No function available
                     self._last_recv = datetime.datetime.now()  # noqa: DTZ005
 
-                except (ConnectionRefusedError, OSError) as e:
+                except OSError as e:
                     _LOGGER.warning(
                         "Failed to connect: %s - sleeping backoff %s",
                         e,
@@ -239,6 +239,7 @@ class Client:
                     except asyncio.CancelledError as e:
                         # Cancelled - closing
                         _LOGGER.debug("Ignoring exception during closing : %s", e)
+                        raise
 
             self._backoff.reset()
         _LOGGER.debug("_connect() - unlocked")

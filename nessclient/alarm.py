@@ -131,6 +131,7 @@ class Alarm:
             if self.arming_state == ArmingState.UNKNOWN:
                 self._update_arming_state(ArmingState.DISARMED)
             else:
+                # State is already known - do nothing
                 pass
         else:
             # State inference is disabled, therefore we can assume the
@@ -199,10 +200,14 @@ class Alarm:
             if self.arming_state != ArmingState.DISARMED:
                 self._update_arming_state(ArmingState.ARMED)
             else:
-                pass
+                _LOGGER.warning(
+                    "ALARM_RESTORE only works from DISARMED state - ignoring"
+                )
         elif event.type == SystemStatusEvent.EventType.ENTRY_DELAY_START:
             self._update_arming_state(ArmingState.ENTRY_DELAY)
         elif event.type == SystemStatusEvent.EventType.ENTRY_DELAY_END:
+            # Entry delay has ended - separate event will be received for
+            # either armed, or tripped.
             pass
         elif event.type == SystemStatusEvent.EventType.EXIT_DELAY_START:
             self._update_arming_state(ArmingState.EXIT_DELAY)
@@ -212,7 +217,9 @@ class Alarm:
             if self.arming_state == ArmingState.EXIT_DELAY:
                 self._update_arming_state(ArmingState.ARMED)
             else:
-                pass
+                _LOGGER.warning(
+                    "EXIT_DELAY_END only works from EXIT_DELAY state - ignoring"
+                )
         elif event.type in ARM_EVENTS_MAP:
             self._arming_mode = ARM_EVENTS_MAP[event.type]
             self._update_arming_state(ArmingState.ARMING)
@@ -220,6 +227,7 @@ class Alarm:
             self._arming_mode = None  # Restore arming mode on disarmed.
             self._update_arming_state(ArmingState.DISARMED)
         elif event.type == SystemStatusEvent.EventType.ARMING_DELAYED:
+            # Auto-timer-arming was delayed by user - Nothing to do
             pass
 
     def _update_arming_state(self, state: ArmingState) -> None:

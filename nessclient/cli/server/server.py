@@ -122,14 +122,14 @@ class Server:
                 and (b"\n" not in data)
             ):
                 try:
-                    read_sockets, _, x_sockets = select.select([conn], [], [conn], 0.1)
+                    read_sockets, _, _ = select.select([conn], [], [conn], 0.1)
                     if len(read_sockets) > 0:
                         data_read = conn.recv(1)
                         if data_read is None:
                             _LOGGER.info("server exit")
                             break
                         data += data_read
-                except (ConnectionResetError, OSError) as e:
+                except OSError as e:
                     _LOGGER.info("Exception during recv: %s", e)
                     data = None
 

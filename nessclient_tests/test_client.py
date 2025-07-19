@@ -11,13 +11,13 @@ from nessclient.event import BaseEvent
 
 
 @pytest.fixture
-def alarm() -> Alarm:
+def alarm() -> Mock:
     """Mock alarm object fixture within the Client fixture."""
     return Mock()
 
 
 @pytest.fixture
-def connection() -> Connection:
+def connection() -> AsyncMock:
     """Mock connection object fixture within the Client fixture."""
     return AsyncMock(Connection)
 

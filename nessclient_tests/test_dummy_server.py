@@ -127,13 +127,8 @@ class ClientServerPair:
 
     def stop_server(self) -> None:
         """Stop the emulated alarm server."""
-
-        async def _cancel() -> None:
-            """Stop alarm-emulator server."""
-            _LOGGER.info("stop server")
-            self.server.stop()
-
-        asyncio.run_coroutine_threadsafe(_cancel(), self.loop).result()
+        _LOGGER.info("stop server")
+        self.server.stop()
 
     def stop(self) -> None:
         """Stop and close the Client + emulated-alarm server."""

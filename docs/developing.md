@@ -26,6 +26,9 @@ Run a specific test with logging output:
 pipenv run pytest -s --log-cli-level=debug nessclient_tests/test_client.py
 ```
 
+pipenv run pytest -s --log-cli-level=debug -k test_arm_home_trip_duress
+
+
 ## Command-line Interface
 ```sh
 pipenv run python -m nessclient.cli <arguments>
