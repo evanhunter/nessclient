@@ -45,17 +45,22 @@ class Server:
         self._stopflag = True
         self._server_accept_thread.join()
 
+    def _disconnect_one_connection(self, conn: socket.socket) -> None:
+        """Close a connection with a client."""
+        _LOGGER.debug("Disconnecting client %s", conn)
+        self._clients.remove(conn)
+        if conn.fileno() != -1:
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+                conn.close()
+            except OSError:
+                _LOGGER.debug("Shutdown while already disconnected - ignore")
+
     def disconnect_all_clients(self) -> None:
         """Shutdown all client socket connectons."""
         _LOGGER.debug("Server disconnecting all clients")
         for conn in self._clients:
-            _LOGGER.debug("Disconnecting client %s", conn)
-            if conn.fileno() != -1:
-                try:
-                    conn.shutdown(socket.SHUT_RDWR)
-                except OSError:
-                    _LOGGER.debug("Shutdown while already disconnected - ignore")
-                conn.close()
+            self._disconnect_one_connection(conn)
 
     def _loop(self, host: str, port: int) -> None:
         """
@@ -99,6 +104,31 @@ class Server:
         pkt = event.encode()
         self.write_to_all_clients(pkt.encode().encode("ascii"))
 
+    def _try_read_character(
+        self, conn: socket.socket, timeout_sec: float
+    ) -> bytes | None:
+        """
+        Attempt to read one character from a client connection.
+
+        Note Returns "" on Timeout or None on error
+        """
+        try:
+            read_sockets, _, _ = select.select([conn], [], [conn], timeout_sec)
+            if len(read_sockets) <= 0:
+                # Timed out before any data was read
+                return b""
+            data_read = conn.recv(1)
+
+        except OSError as e:
+            _LOGGER.info("Exception during recv: %s", e)
+            return None
+
+        if data_read is None:
+            _LOGGER.info("server exit")
+            return None
+
+        return data_read
+
     def _on_client_connected(self, conn: socket.socket, addr: Any) -> None:
         """
         Service a client connection.
@@ -113,37 +143,25 @@ class Server:
 
         conn.setblocking(False)  # noqa: FBT003 # bool arg dictatd by socket api
 
+        # Loop reading lines
         while not self._stopflag:
             data: bytes | None = b""
+
+            # Loop to read a single line - character by character
             while (
                 (not self._stopflag)
                 and (conn.fileno() != -1)
                 and (data is not None)
                 and (b"\n" not in data)
             ):
-                try:
-                    read_sockets, _, _ = select.select([conn], [], [conn], 0.1)
-                    if len(read_sockets) > 0:
-                        data_read = conn.recv(1)
-                        if data_read is None:
-                            _LOGGER.info("server exit")
-                            break
-                        data += data_read
-                except OSError as e:
-                    _LOGGER.info("Exception during recv: %s", e)
-                    data = None
+                data_read = self._try_read_character(conn, 0.1)
+                if data_read is None:
+                    break
+                data += data_read
 
             if data is None:  # or len(data) == 0:
-                _LOGGER.info("client %s disconnected %s", addr, conn)
                 with self._clients_lock:
-                    _LOGGER.info("removing connection %s", conn)
-                    self._clients.remove(conn)
-                    try:
-                        conn.shutdown(socket.SHUT_RDWR)
-                        conn.close()
-                    except OSError:
-                        pass
-
+                    self._disconnect_one_connection(conn)
                 break
 
             _LOGGER.info("server data-received callback for %s : %s", conn, data)

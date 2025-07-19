@@ -375,6 +375,20 @@ class Client:
 
         _LOGGER.debug("_recv_loop ending")
 
+    def _signal_statusupdate_waiter(self, event: StatusUpdate) -> None:
+        """Check for threads awaiting a StatusUpdate packet, and signal them."""
+        f = self._requests_awaiting_response[event.request_id]
+        if f is None:
+            _LOGGER.debug("No waiter %s", self._requests_awaiting_response)
+            return
+
+        _LOGGER.debug("Waiter for %s :  %s", event, f)
+        try:
+            f.set_result(event)
+        except asyncio.exceptions.InvalidStateError as e:
+            _LOGGER.info("Waiter already set for %s : %s", f, e)
+        self._requests_awaiting_response[event.request_id] = None
+
     def process_received_data(self, data: bytes) -> None:
         """Process a received packet."""
         # Ruff: local timezone - No function available
@@ -387,39 +401,30 @@ class Client:
             return
 
         _LOGGER.debug("Decoding data: '%s'", decoded_data)
-        if len(decoded_data) > 0:
-            try:
-                pkt = Packet.decode(decoded_data)
-                event = BaseEvent.decode(pkt)
-            except ValueError:
-                self.bad_received_packets += 1
-                _LOGGER.warning("Failed to decode packet", exc_info=True)
-                return
-            except RuntimeError:
-                _LOGGER.exception("Error whilst decoding packet")
-                return
+        if len(decoded_data) == 0:
+            return
 
-            _LOGGER.debug("Decoded event: %s", event)
-            # Check if the received packet is a response to a Status Update
-            #  Request which is awaiting the response
-            if isinstance(event, StatusUpdate):
-                f = self._requests_awaiting_response[event.request_id]
-                if f is not None:
-                    _LOGGER.debug("Waiter for %s :  %s", event, f)
-                    try:
-                        f.set_result(event)
-                    except asyncio.exceptions.InvalidStateError as e:
-                        _LOGGER.info("Waiter already set for %s : %s", f, e)
-                    self._requests_awaiting_response[event.request_id] = None
-                else:
-                    _LOGGER.debug("No waiter %s", self._requests_awaiting_response)
-            else:
-                _LOGGER.debug("Not StatusUpdate: %s", type(event))
+        try:
+            pkt = Packet.decode(decoded_data)
+            event = BaseEvent.decode(pkt)
+        except ValueError:
+            self.bad_received_packets += 1
+            _LOGGER.warning("Failed to decode packet", exc_info=True)
+            return
+        except RuntimeError:
+            _LOGGER.exception("Error whilst decoding packet")
+            return
 
-            if self._on_event_received is not None:
-                self._on_event_received(event)
+        _LOGGER.debug("Decoded event: %s", event)
+        # Check if the received packet is a response to a Status Update
+        #  Request which is awaiting the response
+        if isinstance(event, StatusUpdate):
+            self._signal_statusupdate_waiter(event)
 
-            self.alarm.handle_event(event)
+        if self._on_event_received is not None:
+            self._on_event_received(event)
+
+        self.alarm.handle_event(event)
 
     def _should_reconnect(self) -> bool:
         # Ruff: local timezone - No function available

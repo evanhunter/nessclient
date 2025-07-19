@@ -55,7 +55,7 @@ def gemerate_input_to_ness_user_interface_valid_packets() -> (  # ruff/black dis
 def gemerate_data_for_output_from_ness_event_data_packets() -> (  # noqa: PLR0912, PLR0915
     list[TestPacketWithDescription]
 ):
-    """Generate data for all possible System Status Output Events."""
+    """Generate inner data for all possible System Status Output Events."""
     zone_range = list(
         range(SystemStatusEvent.ZONE_ID_MIN, SystemStatusEvent.ZONE_ID_MAX + 1)
     )
@@ -542,44 +542,49 @@ def gemerate_data_for_output_from_ness_event_data_packets() -> (  # noqa: PLR091
     return data
 
 
+def _gen_system_status_packet(
+    start: str, address: int, seq: int, packet_chars: str, packet_desc: str
+) -> TestPacketWithDescription:
+    """Generate a SystemStatus packet for a specific inner data string."""
+    if start in {"83", "87"}:
+        packet = f"{start}{address:02x}{seq}361{packet_chars}"
+    else:
+        packet = f"{start}{seq}361{packet_chars}"
+    if start in {"86", "87"}:
+        # Ruff: local timezone - No function available
+        packet += datetime.now().strftime("%y%m%d%H%M%S")  # noqa: DTZ005
+
+    total = 0
+    for pos in range(0, len(packet), 2):
+        total += int(packet[pos : pos + 2], 16)
+    checksum = (256 - total) % 256
+    packet = f"{packet}{checksum:02x}\r\n"
+
+    return TestPacketWithDescription(
+        packet_chars=packet,
+        description=(
+            f"{packet_desc} for address {address} with start={start} and seq={seq}"
+        ),
+    )
+
+
 def gemerate_output_from_ness_event_data_valid_packets() -> (  # ruff/black disagree
     list[TestPacketWithDescription]
 ):
     """Generate test packets for all possible System Status Output Events."""
-    output_from_ness_event_data_valid_data: list[TestPacketWithDescription] = (
-        gemerate_data_for_output_from_ness_event_data_packets()
-    )
-
-    output_from_ness_event_data_valid_packets: list[TestPacketWithDescription] = []
-    for start in ["82", "83", "86", "87"]:
-        for address in range(0xF + 1):
-            for seq in [0, 8]:
-                for test_pkt in output_from_ness_event_data_valid_data:
-                    if start in {"83", "87"}:
-                        packet = f"{start}{address:02x}{seq}361{test_pkt.packet_chars}"
-                    else:
-                        packet = f"{start}{seq}361{test_pkt.packet_chars}"
-                    if start in {"86", "87"}:
-                        # Ruff: local timezone - No function available
-                        packet += datetime.now().strftime(  # noqa: DTZ005
-                            "%y%m%d%H%M%S"
-                        )
-
-                    total = 0
-                    for pos in range(0, len(packet), 2):
-                        total += int(packet[pos : pos + 2], 16)
-                    checksum = (256 - total) % 256
-                    packet = f"{packet}{checksum:02x}\r\n"
-
-                    output_from_ness_event_data_valid_packets.append(
-                        TestPacketWithDescription(
-                            packet_chars=packet,
-                            description=(
-                                f"{test_pkt.description} for address {address} "
-                                f"with start={start} and seq={seq}"
-                            ),
-                        )
-                    )
+    output_from_ness_event_data_valid_packets: list[TestPacketWithDescription] = [
+        _gen_system_status_packet(
+            start,
+            address,
+            seq,
+            test_pkt.packet_chars,
+            test_pkt.description,
+        )
+        for start in ["82", "83", "86", "87"]
+        for address in range(0xF + 1)
+        for seq in [0, 8]
+        for test_pkt in gemerate_data_for_output_from_ness_event_data_packets()
+    ]
 
     return output_from_ness_event_data_valid_packets
 
