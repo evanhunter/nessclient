@@ -17,6 +17,7 @@ dependencies = [
     "justbackoff",
     'dataclasses;python_version<"3.7"',
     "pyserial_asyncio",
+    "click",
 ]
 
 keywords = ["Ness", "Alarm", "D8x", "D16x", "home-automation"]
@@ -34,7 +35,6 @@ ness-cli = "nessclient.cli.__main__:cli"
 
 
 [project.optional-dependencies]
-cli = ["click"]
 build = ["build"]
 test = ["pytest", "pytest-cov", "pytest-asyncio"]
 all = ["nessclient[cli,test,build]"]
@@ -51,4 +51,5 @@ log_cli_format = "%(asctime)s.%(msecs)03d [%(threadName)-25s] [%(levelname)8s] %
 omit = [".eggs/*", "setup.py"]
 
 [tool.setuptools]
-py-modules = ["nessclient"]
+py-modules = ["nessclient", 'nessclient.cli', 'nessclient.cli.server']
+packages = ['nessclient', 'nessclient.cli', 'nessclient.cli.server']
