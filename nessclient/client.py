@@ -288,20 +288,35 @@ class Client:
         await self._connection.close()
 
     def on_state_change(
-        self, f: Callable[[ArmingState, ArmingMode | None], None]
-    ) -> Callable[[ArmingState, ArmingMode | None], None]:
+        self, f: Callable[[ArmingState, ArmingMode | None], None] | None
+    ) -> Callable[[ArmingState, ArmingMode | None], None] | None:
+        """
+        Provide a decorator @client.on_state_change for alarm state-change handlers.
+
+        Can also be called directly to set the state-change handler
+        """
         self.alarm.on_state_change(f)
         return f
 
     def on_zone_change(
-        self, f: Callable[[int, bool], None]
-    ) -> Callable[[int, bool], None]:
+        self, f: Callable[[int, bool], None] | None
+    ) -> Callable[[int, bool], None] | None:
+        """
+        Provide a decorator @client.on_zone_change for alarm zone-sealed handlers.
+
+        Can also be called directly to set the zone-sealed handler
+        """
         self.alarm.on_zone_change(f)
         return f
 
     def on_event_received(
-        self, f: Callable[[BaseEvent], None]
-    ) -> Callable[[BaseEvent], None]:
+        self, f: Callable[[BaseEvent], None] | None
+    ) -> Callable[[BaseEvent], None] | None:
+        """
+        Provide a decorator @client.on_event_received for alarm general event handler.
+
+        Can also be called directly to set the general event handler
+        """
         self._on_event_received = f
         return f
 
