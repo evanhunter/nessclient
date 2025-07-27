@@ -57,7 +57,7 @@ async def test_disarm(connection, client):
 async def test_panic(connection, client):
     await client.panic("1234")
     assert connection.write.call_count == 1
-    assert get_data(connection.write.call_args[0][0]) == b"*1234#"
+    assert get_data(connection.write.call_args[0][0]) == b"*1234E"
 
 
 @pytest.mark.asyncio

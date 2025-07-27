@@ -117,7 +117,7 @@ async def test_disarm_emits_ascii_payload(client: Client, connection: Connection
 @pytest.mark.asyncio
 async def test_panic_emits_ascii_payload(client: Client, connection: Connection) -> None:
     await client.panic("1234")
-    connection.write.assert_called_once_with(b"8300660*1234#82\r\n")
+    connection.write.assert_called_once_with(b"8300660*1234E60\r\n")
 
 
 @pytest.mark.asyncio

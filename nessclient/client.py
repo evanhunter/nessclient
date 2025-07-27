@@ -75,8 +75,13 @@ class Client:
         command = "{}E".format(code)
         return await self.send_command(command)
 
-    async def panic(self, code: str) -> None:
-        command = "*{}#".format(code)
+    async def panic(self, code: str | None) -> None:
+        """
+        Send the 'Panic' command to the Ness alarm device.
+
+        :param code: The user code to send
+        """
+        command = "*{}E".format(code)
         return await self.send_command(command)
 
     async def aux(self, output_id: int, state: bool = True) -> None:
