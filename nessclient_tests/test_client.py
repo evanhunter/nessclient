@@ -184,6 +184,20 @@ def test_on_zone_change_callback_is_registered(client, alarm):
     assert alarm.on_zone_change.call_args[0][0] == cb
 
 
+def test_bad_args() -> None:
+    """Check that bad arguments are rejected by Client constructor."""
+    with pytest.raises(
+        ValueError,
+        match=r"Must provide host\+port or serial_tty or connection object",
+    ):
+        Client(host=None, port=1234)
+    with pytest.raises(
+        ValueError,
+        match=r"Must provide host\+port or serial_tty or connection object",
+    ):
+        Client(host="test123", port=None)
+
+
 @pytest.mark.asyncio
 async def test_events_stream_receives_event(client):
     stream = client.stream_events()

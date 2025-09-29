@@ -10,14 +10,14 @@ from .zone import Zone
 
 _LOGGER = logging.getLogger(__name__)
 
-EXIT_DELAY = 10
-ENTRY_DELAY = 10
-
 
 class Alarm:
     """
     Represents the complex alarm state machine
     """
+
+    EXIT_DELAY = 10
+    ENTRY_DELAY = 10
 
     class ArmingState(Enum):
         DISARMED = "DISARMED"
@@ -214,3 +214,11 @@ class Alarm:
             self._alarm_state_changed(self.state, state, self._arming_mode)
 
         self.state = state
+
+    def get_state(self) -> ArmingState:
+        """Get the current Alarm State."""
+        return self.state
+
+    def get_arming_mode(self) -> ArmingMode | None:
+        """Get the current Arming Mode."""
+        return self._arming_mode
