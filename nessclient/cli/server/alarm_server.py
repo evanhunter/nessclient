@@ -61,6 +61,11 @@ class AlarmServer:
         self._server.start(host=self._host, port=self._port)
         curses.wrapper(self._run_ui)
 
+    def stop(self) -> None:
+        _LOGGER.debug("Stopping AlarmServer")
+        self._stop_simulation()
+        self._server.stop()
+
     def _run_ui(self, stdscr: Any) -> None:
         curses.curs_set(1)
         curses.start_color()
