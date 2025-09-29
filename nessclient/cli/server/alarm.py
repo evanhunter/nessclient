@@ -25,6 +25,10 @@ class Alarm:
         ARMED = "ARMED"
         ENTRY_DELAY = "ENTRY_DELAY"
         TRIPPED = "TRIPPED"
+        PANIC = "PANIC"
+        DURESS = "DURESS"
+        MEDICAL = "MEDICAL"
+        FIRE = "FIRE"
 
     class ArmingMode(Enum):
         ARMED_AWAY = "ARMED_AWAY"
@@ -52,6 +56,8 @@ class Alarm:
         self._zone_state_changed = _zone_state_changed
         self._aux_output_state_changed = _aux_output_state_changed
         self._pending_event: str | None = None
+        self.exit_delay = 10
+        self.entry_delay = 10
 
     @property
     def arming_mode(self) -> "Alarm.ArmingMode | None":
@@ -124,6 +130,25 @@ class Alarm:
     def _trip_complete(self) -> None:
         _LOGGER.debug("Trip completed")
         self._update_state_no_mode(Alarm.ArmingState.TRIPPED)
+
+    def panic(self) -> None:
+        """Put alarm into Panic alarm state."""
+        _LOGGER.info("setting panic")
+        self._update_state_no_mode(Alarm.ArmingState.PANIC)
+
+    def duress(self) -> None:
+        """Put alarm into Duress alarm state."""
+        _LOGGER.info("setting duress")
+        self._cancel_pending_update()
+        self._update_state_no_mode(Alarm.ArmingState.DURESS)
+
+    def medical(self) -> None:
+        """Put alarm into Medical alarm state."""
+        self._update_state_no_mode(Alarm.ArmingState.MEDICAL)
+
+    def fire(self) -> None:
+        """Put alarm into Fire alarm state."""
+        self._update_state_no_mode(Alarm.ArmingState.FIRE)
 
     def _cancel_pending_update(self) -> None:
         if self._pending_event is not None:
