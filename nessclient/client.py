@@ -58,6 +58,9 @@ class Client:
         self._connect_lock = asyncio.Lock()
         self._last_recv: datetime.datetime | None = None
         self._update_interval = update_interval
+        self.connected_count = 0
+        self.reconnect_count = 0
+        self.disconnection_count = 0
         # Track pending USER_INTERFACE status request futures keyed by request id
         # Only a single Future is retained per request id; concurrent waiters share it.
         self._pending_ui_requests: Dict[int, asyncio.Future[StatusUpdate]] = {}
@@ -136,11 +139,13 @@ class Client:
             if self._should_reconnect():
                 _LOGGER.debug("Closing stale connection and reconnecting")
                 await self._connection.close()
+                self.reconnect_count += 1
 
             while not self._connection.connected:
                 _LOGGER.debug("Attempting to connect")
                 try:
                     await self._connection.connect()
+                    self.connected_count += 1
                 except (ConnectionRefusedError, OSError) as e:
                     _LOGGER.warning("Failed to connect: %s", e)
                     await sleep(self._backoff.duration())
@@ -205,6 +210,7 @@ class Client:
                 data = await self._connection.read()
                 if data is None:
                     _LOGGER.debug("Received None data from connection.read()")
+                    self.disconnection_count += 1
                     break
 
                 self._last_recv = datetime.datetime.now()
