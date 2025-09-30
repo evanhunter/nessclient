@@ -161,7 +161,7 @@ class PacketTestCase(unittest.TestCase):
 
     def test_decode_status_update_response_zone_17_32_none(self):
         # Zone 17-32 Input Unsealed (ID 0x20), no zones set
-        pkt = Packet.decode("82000360200000ff")
+        pkt = Packet.decode("82000360200000fb")
         self.assertEqual(pkt.start, 0x82)
         self.assertEqual(pkt.address, 0x00)
         self.assertEqual(pkt.length, 3)
@@ -173,14 +173,14 @@ class PacketTestCase(unittest.TestCase):
 
     def test_decode_status_update_response_zone_17_32_in_alarm_zone17(self):
         # Zone 17-32 In Alarm (ID 0x25), Zone 17 set
-        pkt = Packet.decode("82000360250100aa")
+        pkt = Packet.decode("82000360250100F5")
         self.assertEqual(pkt.data, "250100")
         self.assertTrue(pkt.is_user_interface_resp)
 
     def test_decode_status_update_response_zone_23_unsealed_example(self):
         # From FORM 5 examples in the spec (address 0x07)
         # Example: Zone 23 unseal (ID 0x20, data 0x4000)
-        pkt = Packet.decode("8207036020400013")
+        pkt = Packet.decode("82070360204000B4")
         self.assertEqual(pkt.start, 0x82)
         self.assertEqual(pkt.address, 0x07)
         self.assertEqual(pkt.length, 3)
@@ -192,7 +192,7 @@ class PacketTestCase(unittest.TestCase):
     def test_decode_status_update_response_zone_23_24_unsealed_example(self):
         # From FORM 5 examples in the spec (address 0x07)
         # Example: Zones 23 and 24 unseal (ID 0x20, data 0xC000)
-        pkt = Packet.decode("8207036020c00054")
+        pkt = Packet.decode("8207036020c00034")
         self.assertEqual(pkt.address, 0x07)
         self.assertEqual(pkt.data, "20c000")
         self.assertTrue(pkt.is_user_interface_resp)
