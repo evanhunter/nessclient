@@ -379,6 +379,31 @@ class MiscellaneousAlarmsUpdate(StatusUpdate):
             address=packet.address,
         )
 
+    def encode(self) -> Packet:
+        """
+        Encode a Miscellaneous Alarms Update packet.
+
+        Encode this :py:class:`MiscellaneousAlarmsUpdate`
+        object into a :py:class:`Packet` object.
+
+        Note: Primarily for testing and simulating a Ness alarm
+
+        :return: The :py:class:`Packet` object representing this
+                 encoded :py:class:`ZoneUpdate` object
+        """
+        data = (
+            f"{self.request_id.value:02x}"
+            f"{pack_unsigned_short_data_enum(self.included_alarms)}"
+        )
+        return Packet(
+            address=self.address,
+            seq=0x00,
+            command=CommandType.USER_INTERFACE,
+            data=data,
+            timestamp=None,
+            is_user_interface_resp=True,
+        )
+
 
 class ArmingUpdate(StatusUpdate):
     class ArmingStatus(Enum):
@@ -493,6 +518,27 @@ class OutputsUpdate(StatusUpdate):
             address=packet.address,
         )
 
+    def encode(self) -> Packet:
+        """
+        Encode this :py:class:`OutputsUpdate` object into a :py:class:`Packet` object.
+
+        Note: Primarily for testing and simulating a Ness alarm
+
+        :return: The :py:class:`Packet` object representing this
+                 encoded :py:class:`OutputsUpdate` object
+        """
+        data = (
+            f"{self.request_id.value:02x}{pack_unsigned_short_data_enum(self.outputs)}"
+        )
+        return Packet(
+            address=self.address,
+            seq=0x00,
+            command=CommandType.USER_INTERFACE,
+            data=data,
+            timestamp=None,
+            is_user_interface_resp=True,
+        )
+
 
 class ViewStateUpdate(StatusUpdate):
     class State(Enum):
@@ -527,6 +573,25 @@ class ViewStateUpdate(StatusUpdate):
             state=state,
             timestamp=packet.timestamp,
             address=packet.address,
+        )
+
+    def encode(self) -> Packet:
+        """
+        Encode this :py:class:`ViewStateUpdate` object into a :py:class:`Packet` object.
+
+        Note: Primarily for testing and simulating a Ness alarm
+
+        :return: The :py:class:`Packet` object representing this
+                 encoded :py:class:`ViewStateUpdate` object
+        """
+        data = f"{self.request_id.value:02x}{self.state.value:04x}"
+        return Packet(
+            address=self.address,
+            seq=0x00,
+            command=CommandType.USER_INTERFACE,
+            data=data,
+            timestamp=None,
+            is_user_interface_resp=True,
         )
 
 
