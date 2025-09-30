@@ -240,6 +240,12 @@ class StatusUpdate(BaseEvent):
         else:
             raise ValueError("Unhandled request_id case: {}".format(request_id))
 
+    def encode(self) -> Packet:
+        """Abstract method - do not call."""
+        raise NotImplementedError(
+            "Encode not supported for {}".format(self.request_id.name)
+        )
+
 
 class ZoneUpdate_1_16(StatusUpdate):
     class Zone(Enum):
