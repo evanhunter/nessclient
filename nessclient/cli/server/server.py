@@ -108,7 +108,11 @@ class Server:
         buffer = b""
         try:
             while True:
-                data = conn.recv(1024)
+                try:
+                    data = conn.recv(1024)
+                except OSError as e:
+                    _LOGGER.info("Exception during recv: %s", e)
+                    data = None
                 if not data:
                     _LOGGER.info("client %s disconnected", addr)
                     break
