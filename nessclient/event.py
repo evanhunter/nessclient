@@ -106,11 +106,13 @@ class SystemStatusEvent(BaseEvent):
         area: int,
         address: int | None,
         timestamp: datetime.datetime | None,
+        sequence: bool = False,
     ) -> None:
         super(SystemStatusEvent, self).__init__(address=address, timestamp=timestamp)
         self.type = type
         self.zone = zone
         self.area = area
+        self.sequence = sequence
 
     @classmethod
     def decode(
@@ -125,16 +127,17 @@ class SystemStatusEvent(BaseEvent):
             area=area,
             timestamp=packet.timestamp,
             address=packet.address,
+            sequence=packet.seq == 1,
         )
 
     def encode(self) -> Packet:
         data = "{:02x}{:02d}{:02x}".format(self.type.value, self.zone, self.area)
         return Packet(
             address=self.address,
-            seq=0x00,
+            seq=(1 if self.sequence else 0),
             command=CommandType.SYSTEM_STATUS,
             data=data,
-            timestamp=None,
+            timestamp=self.timestamp,
             is_user_interface_resp=False,
         )
 
