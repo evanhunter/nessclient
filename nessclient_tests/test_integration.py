@@ -122,7 +122,7 @@ async def test_panic_emits_ascii_payload(client: Client, connection: Connection)
 
 @pytest.mark.asyncio
 async def test_aux_on_emits_ascii_payload(client: Client, connection: Connection) -> None:
-    await client.aux(3, True)
+    await client.aux_output(3, True)
     connection.write.assert_called_once_with(b"830036033*0C\r\n")
 
 
@@ -130,7 +130,7 @@ async def test_aux_on_emits_ascii_payload(client: Client, connection: Connection
 async def test_aux_off_emits_ascii_payload(
     client: Client, connection: Connection
 ) -> None:
-    await client.aux(3, False)
+    await client.aux_output(3, False)
     connection.write.assert_called_once_with(b"830036033#13\r\n")
 
 
