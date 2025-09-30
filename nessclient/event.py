@@ -636,7 +636,7 @@ class PanelVersionUpdate(StatusUpdate):
         return "{}.{}".format(self.major_version, self.minor_version)
 
     def encode(self) -> Packet:
-        model_mapper = self._model_mapper or PanelVersionUpdate.ModelRev16Mapper
+        model_mapper = self._model_mapper or PanelVersionUpdate.ModelLegacyMapper
         model_mapper_inv = {v: k for k, v in model_mapper.items()}
         model = model_mapper_inv[self.model]
         data = "{:02x}{:02x}{:x}{:x}".format(
