@@ -796,6 +796,12 @@ class AuxiliaryOutputsUpdate(StatusUpdate):
             address=address,
             timestamp=timestamp,
         )
+
+        for o in outputs:
+            if o not in AuxiliaryOutputsUpdate.OutputType:
+                msg = "Invalid aux output value"
+                raise ValueError(msg)
+
         self.outputs = outputs
 
     def encode(self) -> Packet:
