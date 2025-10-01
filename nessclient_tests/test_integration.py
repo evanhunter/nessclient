@@ -11,16 +11,20 @@ from nessclient.event import (
     StatusUpdate,
     SystemStatusEvent,
 )
+from nessclient.packet import Packet
 
 
-@pytest.mark.asyncio
-async def test_ascii_payload_updates_alarm_state(
-    client: Client, connection: Connection, alarm: Alarm
-) -> None:
-    # Example taken from protocol specification: Duress event
-    ascii_payload = "870203610201840612010743008D"
-    await _feed_ascii(client, connection, ascii_payload)
-    assert alarm.arming_state == ArmingState.TRIGGERED
+# NOTE:
+# It would be nice to test the packets listed under 'Examples' in the protocol spec,
+# However these examples all have mistakes:
+# * All calculated checksums have been calculated as
+#           `bad_checksum = 100 - (sum & 0xff)`
+#       The correct calculation is:
+#           `checksum = 256 - (sum & 0xff)`
+#       Presumably the value 0x100 was mistaken for 100
+# * There are many conversion errors between hex and ascii
+# * There are several examples where the checksum is entirely missing
+#
 
 
 @pytest.mark.asyncio
