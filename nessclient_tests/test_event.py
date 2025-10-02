@@ -40,8 +40,12 @@ class BaseEventTestCase(unittest.TestCase):
         self.assertTrue(isinstance(event, StatusUpdate))
 
     def test_decode_unknown_event(self):
-        pkt = make_packet(cast(CommandType, 0x01), "000000")
-        self.assertRaises(ValueError, lambda: BaseEvent.decode(pkt))
+        """Test Packet constructor/decode raises an exception for an invalid command."""
+        self.assertRaises(
+            ValueError,
+            lambda: make_packet(cast(CommandType, 0x01), "000000"),
+        )
+        self.assertRaises(ValueError, lambda: Packet.decode("820003010000007A"))
 
 
 class StatusUpdateTestCase(unittest.TestCase):
