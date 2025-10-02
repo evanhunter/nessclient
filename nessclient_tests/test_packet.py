@@ -15,10 +15,7 @@ def fixture_path(fixture_name: str):
 
 class PacketTestCase(unittest.TestCase):
     def test_decode_encode_identity(self):
-        cases = [
-            # '8700036100070018092118370677',
-            "8300c6012345678912EE7"
-        ]
+        cases = ["8300C6012345678912E07"]
 
         for case in cases:
             pkt = Packet.decode(case)
@@ -32,7 +29,7 @@ class PacketTestCase(unittest.TestCase):
                 _LOGGER.info("Decoded '%s' into %s", line, pkt)
 
     def test_user_interface_packet_decode(self):
-        pkt = Packet.decode("8300c6012345678912EE7")
+        pkt = Packet.decode("8300C6012345678912E07")
         self.assertEqual(pkt.start, 0x83)
         self.assertEqual(pkt.address, 0x00)
         self.assertEqual(pkt.length, 12)
@@ -40,7 +37,7 @@ class PacketTestCase(unittest.TestCase):
         self.assertEqual(pkt.command, CommandType.USER_INTERFACE)
         self.assertEqual(pkt.data, "12345678912E")
         self.assertIsNone(pkt.timestamp)
-        self.assertEqual(pkt.checksum, 0xE7)
+        self.assertEqual(pkt.checksum, 0x07)
 
     def test_system_status_packet_decode(self):
         pkt = Packet.decode("8700036100070018092118370974")
