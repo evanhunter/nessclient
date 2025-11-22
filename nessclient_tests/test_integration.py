@@ -11,7 +11,6 @@ from nessclient.event import (
     StatusUpdate,
     SystemStatusEvent,
 )
-from nessclient.packet import Packet
 
 
 # NOTE:

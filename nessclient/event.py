@@ -143,21 +143,7 @@ class SystemStatusEvent(BaseEvent):
         )
 
     def encode(self) -> Packet:
-        if (
-            self.zone == SystemStatusEvent.ZONE_ID_VIOLATING_DECIMAL_ID
-            and SystemStatusEvent.EventType(self.type)
-            in [
-                SystemStatusEvent.EventType.ALARM,
-                SystemStatusEvent.EventType.ALARM_RESTORE,
-                SystemStatusEvent.EventType.TAMPER_UNSEALED,
-                SystemStatusEvent.EventType.TAMPER_NORMAL,
-            ]
-        ):
-            # These types violate the decimal ID field by having a
-            # hex 0xf0 value instead of decimal 15
-            data = "{:02x}{:02x}{:02x}".format(self.type.value, self.zone, self.area)
-        else:
-            data = "{:02x}{:02d}{:02x}".format(self.type.value, self.zone, self.area)
+        data = "{:02x}{:02x}{:02x}".format(self.type.value, self.zone, self.area)
         return Packet(
             address=self.address,
             seq=(1 if self.sequence else 0),
@@ -562,9 +548,7 @@ class OutputsUpdate(StatusUpdate):
         :return: The :py:class:`Packet` object representing this
                  encoded :py:class:`OutputsUpdate` object
         """
-        data = (
-            f"{self.request_id.value:02x}{pack_unsigned_short_data_enum(self.outputs)}"
-        )
+        data = f"{self.request_id.value:02x}{pack_unsigned_short_data_enum(self.outputs)}"
         return Packet(
             address=self.address,
             seq=0x00,

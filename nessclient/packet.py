@@ -238,8 +238,7 @@ class Packet:
             raise ValueError(msg)
         if seq != 0:
             msg = (
-                "User-Interface Packet do not use sequence "
-                f"- it must be zero - got {seq}"
+                f"User-Interface Packet do not use sequence - it must be zero - got {seq}"
             )
             raise ValueError(msg)
 
@@ -447,9 +446,7 @@ class Packet:
                 msg = f"Invalid non-hex character in checksum byte: {_data!r}"
                 raise ValueError(msg) from e
             if not _data.endswith(f"{checksum:02X}"):
-                msg = (
-                    f"Packet checksum for input request must be upper case : {_data!r}"
-                )
+                msg = f"Packet checksum for input request must be upper case : {_data!r}"
                 raise ValueError(msg)
             if ((-datasum) & 0xFF) != checksum:
                 msg = (

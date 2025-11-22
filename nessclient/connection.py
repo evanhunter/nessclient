@@ -117,7 +117,12 @@ class Serial232Connection(AsyncIoConnection):
         return (
             super().connected
             and self._serial_connection is not None
-            and self._serial_connection.is_open
+            and (
+                # Pylance does not think isOpen() exists in SerialBase
+                # fmt: off
+                self._serial_connection.isOpen()  # type: ignore[attr-defined] # noqa: E501, RUF100 # pyright: ignore[reportAttributeAccessIssue]
+                # fmt: on
+            )
         )
 
     async def connect(self) -> bool:
@@ -139,4 +144,7 @@ class Serial232Connection(AsyncIoConnection):
         self._serial_connection = transport.serial
         self._writer = asyncio.StreamWriter(transport, protocol, self._reader, loop)
 
-        return self._serial_connection is not None and self._serial_connection.is_open
+        # Pylance does not think isOpen() exists in SerialBase
+        # fmt: off
+        return self._serial_connection is not None and self._serial_connection.isOpen()  # type: ignore[attr-defined] # noqa: E501, RUF100 # pyright: ignore[reportAttributeAccessIssue, reportOptionalMemberAccess]
+        # fmt: on
