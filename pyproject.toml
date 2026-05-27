@@ -53,4 +53,5 @@ line-length = 90
 extend-exclude = ["venv", "virtualenv", "docs"]
 
 [tool.ruff.lint]
+extend-select = ["PT009"]
 ignore = ["E261", "E203"]
