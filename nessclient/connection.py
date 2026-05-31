@@ -117,7 +117,7 @@ class Serial232Connection(AsyncIoConnection):
         return (
             super().connected
             and self._serial_connection is not None
-            and self._serial_connection.is_open  # type: ignore[attr-defined]
+            and self._serial_connection.is_open
         )
 
     async def connect(self) -> bool:
@@ -139,4 +139,4 @@ class Serial232Connection(AsyncIoConnection):
         self._serial_connection = transport.serial
         self._writer = asyncio.StreamWriter(transport, protocol, self._reader, loop)
 
-        return self._serial_connection is not None and self._serial_connection.is_open  # type: ignore[attr-defined] # mypy does not think this exists
+        return self._serial_connection is not None and self._serial_connection.is_open
