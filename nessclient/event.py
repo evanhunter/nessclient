@@ -99,6 +99,10 @@ class SystemStatusEvent(BaseEvent):
         OUTPUT_ON = 0x31
         OUTPUT_OFF = 0x32
 
+    # There are a few event types that violate the
+    # decimal ID field by allowing a hex 0xf0 value
+    ZONE_ID_VIOLATING_DECIMAL_ID = 0xF0
+
     def __init__(
         self,
         type: "SystemStatusEvent.EventType",
@@ -143,7 +147,22 @@ class SystemStatusEvent(BaseEvent):
         )
 
     def encode(self) -> Packet:
-        data = "{:02x}{:02x}{:02x}".format(self.type.value, self.zone, self.area)
+        if (
+            self.zone == SystemStatusEvent.ZONE_ID_VIOLATING_DECIMAL_ID
+            and SystemStatusEvent.EventType(self.type)
+            in [
+                SystemStatusEvent.EventType.ALARM,
+                SystemStatusEvent.EventType.ALARM_RESTORE,
+                SystemStatusEvent.EventType.TAMPER_UNSEALED,
+                SystemStatusEvent.EventType.TAMPER_NORMAL,
+            ]
+        ):
+            # These types violate the decimal ID field by having a
+            # hex 0xf0 value instead of decimal 15
+            data = "{:02x}{:02x}{:02x}".format(self.type.value, self.zone, self.area)
+        else:
+            data = "{:02x}{:02d}{:02x}".format(self.type.value, self.zone, self.area)
+
         return Packet(
             address=self.address,
             seq=(1 if self.sequence else 0),
