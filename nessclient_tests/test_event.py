@@ -40,7 +40,7 @@ class BaseEventTestCase(unittest.TestCase):
     def test_decode_unknown_event(self):
         with pytest.raises(
             ValueError,
-            match=r"Unknown command: 1",
+            match=r"Unknown command 1",
         ):
             pkt = make_packet(cast(CommandType, 0x01), "000000")
             BaseEvent.decode(pkt)

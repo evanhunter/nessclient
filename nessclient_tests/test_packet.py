@@ -165,7 +165,7 @@ class PacketTestCase(unittest.TestCase):
 
     def test_decode_status_update_response_zone_17_32_in_alarm_zone17(self):
         # Zone 17-32 In Alarm (ID 0x25), Zone 17 set
-        pkt = Packet.decode("82000360250100aa")
+        pkt = Packet.decode("82000360250100F5")
         assert pkt.data == "250100"
         assert pkt.is_user_interface_resp
 
